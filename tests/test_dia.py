@@ -87,3 +87,27 @@ def test_cli_hoje(tmp_path, capsys):
     raiz = _cofre(tmp_path)
     assert main(["--cofre", str(raiz), "hoje"]) == 0
     assert (raiz / "Hoje.md").exists()
+
+
+def test_criacao_libera_testes_e_commit_local_mas_nunca_publicar():
+    assert "Bash(git commit:*)" in dia.FERRAMENTAS_CRIACAO and "PowerShell(pytest:*)" in dia.FERRAMENTAS_CRIACAO
+    for f in dia.FERRAMENTAS_CRIACAO + dia.FERRAMENTAS_ROTINA:
+        assert "push" not in f and "gh" not in f.split("(")[-1]
+
+
+def test_instrucao_muda_com_pasta_de_projetos(tmp_path):
+    from pathlib import Path
+
+    com = dia.instrucao_rotina(HOJE, Path("C:/projetos"))
+    sem = dia.instrucao_rotina(HOJE)
+    assert "Como criar.md" in com and "commit só local" in com
+    assert "não há pasta de projetos" in sem
+
+
+def test_projeto_pronto_aparece_para_revisar(tmp_path):
+    raiz = _cofre(tmp_path)
+    (raiz / "Projetos").mkdir()
+    (raiz / "Projetos" / "meu-projeto.md").write_text("---\nstatus: pronto para revisar\n---\n# x", encoding="utf-8")
+    (raiz / "Projetos" / "outro.md").write_text("---\nstatus: construindo\n---\n# y", encoding="utf-8")
+    revisar = dia.gerar_hoje(raiz, HOJE).read_text(encoding="utf-8").split("## Para você revisar")[1].split("##")[0]
+    assert "[[meu-projeto]]" in revisar and "outro" not in revisar

@@ -107,7 +107,7 @@ não por horário, o que afetava quem acordava primeiro e qual era "o mais recen
 os 5 recados com o mesmo `pedido` e **um único** recado na caixa. A [campanha](Projetos/Campanha%20Dia%20das%20Criancas%20By.penas.md)
 ainda lembra de pedir autorização de imagem se aparecer criança no vídeo.
 
-## Modo dia a dia (cofre pessoal, privado)
+## Modo pessoal: um cérebro que cria (cofre privado)
 
 O mesmo motor também roda um **cofre pessoal**, separado deste e que nunca vai para o GitHub. Aqui ficam só o
 código e a ideia; tarefas, vagas e rascunhos reais ficam no PC do dono.
@@ -118,9 +118,12 @@ código e a ideia; tarefas, vagas e rascunhos reais ficam no PC do dono.
 - `cerebro rotina` roda sozinha nos dias úteis às 8h (Agendador de Tarefas do Windows): o Claude Code faz os
   itens da fila, marca `[x]` com o link do resultado e regenera `Hoje.md` (atrasado, hoje, próximos 7 dias, o
   que está pronto para revisar, o que ele fez).
-- **Limites no código:** a rotina só recebe ferramentas para ler e escrever no cofre e pesquisar na web. Mandar
-  mensagem, publicar, se candidatar, pagar ou fazer login não estão disponíveis; quando uma instrução pede isso,
-  ela prepara o rascunho e cria uma tarefa para o dono.
+- **Foco em criação:** o uso principal é criar projetos para o GitHub. A fila recebe instruções como "propor 5
+  ideias" ou "construir X"; com `--projetos <pasta>`, a rotina escreve o código, roda os testes e faz **commit
+  local**. A nota do projeto vira `pronto para revisar` e aparece em `Hoje.md`.
+- **Limites:** a rotina não recebe `git push`, `gh`, mensagens, publicação, pagamento nem login. Publicar é sempre
+  decisão do dono. Limite honesto: como ela pode rodar `python` para testar, a trava é a lista de ferramentas mais
+  as regras escritas, e não um sandbox. Para isolamento de verdade seria preciso um contêiner.
 
 Na primeira rodada real, a rotina fez 2 de 3 instruções. Ela percebeu sozinha que a segunda-feira era feriado ao
 montar o plano da semana. Na busca de vagas, preferiu deixar o item pendente e **escrever uma instrução melhor

@@ -45,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("hoje", help="gera a nota Hoje a partir das tarefas e da fila do Claude")
     p = sub.add_parser("rotina", help="o assistente executa sozinho a fila 'Para o Claude' e atualiza Hoje")
     p.add_argument("--modelo", default="sonnet")
+    p.add_argument("--projetos", help="pasta onde a rotina pode criar projetos (commit local, nunca push)")
     p = sub.add_parser("painel", help="gera o painel HTML")
     p.add_argument("--html", default="site/index.html")
     p = sub.add_parser("rodar", help="acorda os agentes enquanto houver recado aberto")
@@ -88,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.comando == "hoje":
             print(f"Atualizado: {dia.gerar_hoje(raiz).name}")
         else:
-            print(dia.rodar_rotina(raiz, modelo=args.modelo))
+            print(dia.rodar_rotina(raiz, modelo=args.modelo, projetos=args.projetos))
         return 0
     if args.comando == "caixa":
         n = caixa.consolidar(raiz)

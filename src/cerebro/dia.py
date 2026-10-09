@@ -31,6 +31,10 @@ _DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 # O que a rotina pode fazer sozinha. Mandar, publicar, pagar, candidatar e logar NUNCA estão aqui.
 FERRAMENTAS_ROTINA = ["Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch",
                       "Bash(cerebro:*)", "PowerShell(cerebro:*)"]
+# Com uma pasta de projetos, a rotina também constrói: roda Python e testes e faz commit LOCAL.
+# `git push` e `gh` ficam de fora de propósito: publicar é sempre decisão do dono.
+_CRIAR = ["python", "pytest", "pip install -e", "git init", "git add", "git commit", "git status", "git log", "git diff"]
+FERRAMENTAS_CRIACAO = [f"{shell}({c}:*)" for shell in ("Bash", "PowerShell") for c in _CRIAR]
 
 
 @dataclass
@@ -85,8 +89,9 @@ def gerar_hoje(raiz: str | Path, hoje: date | None = None) -> Path:
     pendentes = [t for t in fila if not t.feito]
     recentes = [t for t in fila if t.feito and t.feito_em and t.feito_em >= hoje - timedelta(days=3)]
 
-    rascunhos = sorted(p.stem for p in (raiz / "Rascunhos").glob("*.md")
-                       if re.search(r"^status:\s*revisar\s*$", p.read_text(encoding="utf-8"), re.M)) if (raiz / "Rascunhos").is_dir() else []
+    revisar = re.compile(r"^status:\s*(revisar|pronto para revisar)\s*$", re.M)
+    rascunhos = sorted(p.stem for pasta in ("Rascunhos", "Projetos") if (raiz / pasta).is_dir()
+                       for p in (raiz / pasta).glob("*.md") if revisar.search(p.read_text(encoding="utf-8")))
 
     partes = [f"# Hoje · {_data_br(hoje)}", "",
               "> Gerada sozinha a partir de [[Tarefas]] e [[Para o Claude]]. Não edite aqui: edite lá.", ""]
@@ -105,7 +110,10 @@ def gerar_hoje(raiz: str | Path, hoje: date | None = None) -> Path:
     return destino
 
 
-def instrucao_rotina(hoje: date) -> str:
+def instrucao_rotina(hoje: date, projetos: Path | None = None) -> str:
+    criar = (f"Para itens de criação, siga `Como criar.md`: código em `{projetos}`, testes rodando, commit só local "
+             f"(push e GitHub são do Arthur). " if projetos else
+             "Nesta rotina não há pasta de projetos liberada: itens de criação viram plano/rascunho no cofre. ")
     return (
         f"Você é o assistente pessoal do Arthur e está rodando SOZINHO (rotina automática de {_data_br(hoje)}, "
         f"{hoje.isoformat()}); ele não está disponível para responder. Neste cofre:\n"
@@ -113,7 +121,8 @@ def instrucao_rotina(hoje: date) -> str:
         f"2. Faça, um por um, os itens NÃO marcados de `{FILA}`. Ao terminar cada um, marque `[x]`, acrescente "
         f"`✅ {hoje.isoformat()}` e o link do resultado (ex.: → [[Rascunhos/...]]). Rascunho novo vai em `Rascunhos/` "
         f"com `status: revisar` no topo. Se um item exigir algo proibido pelas Regras (mandar, publicar, candidatar, "
-        f"pagar, logar, senha, CPF), NÃO faça: prepare o que der e crie uma tarefa para ele em `{TAREFAS}` com a data de hoje.\n"
+        f"pagar, logar, senha, CPF, git push), NÃO faça: prepare o que der e crie uma tarefa para ele em `{TAREFAS}` com a data de hoje. "
+        f"{criar}\n"
         f"3. Olhe `{TAREFAS}` e `Vagas/`: se houver algo que você possa adiantar na próxima rotina (pesquisa, rascunho, "
         f"organização), escreva a instrução em `{FILA}` (é assim que você deixa instruções para si mesmo).\n"
         f"4. Rode `cerebro hoje` no fim. Não use git. Responda em até 5 linhas o que fez e o que ficou para o Arthur."
@@ -121,15 +130,18 @@ def instrucao_rotina(hoje: date) -> str:
 
 
 def rodar_rotina(raiz: str | Path, executor=None, hoje: date | None = None, modelo: str = "sonnet",
-                 timeout: int = 1800) -> str:
+                 timeout: int = 3600, projetos: str | Path | None = None) -> str:
     """Roda a rotina (com o Claude Code, ou com um executor de teste), regenera Hoje.md e registra no Diário."""
     raiz, hoje = Path(raiz), hoje or date.today()
-    texto = instrucao_rotina(hoje)
+    projetos = Path(projetos) if projetos else None
+    texto = instrucao_rotina(hoje, projetos)
     if executor is None:
         if shutil.which("claude") is None:
             raise RuntimeError("'claude' não encontrado: a rotina precisa do Claude Code instalado")
+        extra = ["--add-dir", str(projetos)] if projetos else []
+        ferramentas = FERRAMENTAS_ROTINA + (FERRAMENTAS_CRIACAO if projetos else [])
         r = subprocess.run(["claude", "-p", texto, "--model", modelo, "--permission-mode", "acceptEdits",
-                            "--allowedTools", *FERRAMENTAS_ROTINA],
+                            *extra, "--allowedTools", *ferramentas],
                            cwd=raiz, stdin=subprocess.DEVNULL, capture_output=True, text=True,
                            encoding="utf-8", timeout=timeout)
         saida = (r.stdout or r.stderr).strip()
