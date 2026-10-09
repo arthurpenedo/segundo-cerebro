@@ -9,6 +9,7 @@ from collections import Counter
 from datetime import date
 
 from .cofre import Nota, resolver
+from .caixa import abertos_para_humano
 from .mural import agentes, conversas, recados
 
 CORES = {"Agentes": "#7c5cff", "Mural": "#f08c2e", "Projetos": "#2f9e6e", "Carreira": "#4c8dd5",
@@ -27,7 +28,7 @@ border-radius:12px;padding:10px 16px}.num b{display:block;font-size:24px}
 .fio{background:var(--cartao);border:1px solid var(--borda);border-radius:12px;padding:6px 16px;margin-bottom:14px}
 .msg{border-left:3px solid var(--borda);padding:6px 0 6px 12px;margin:12px 0}.msg .quem{font-weight:600}
 .msg .corpo{white-space:pre-wrap;margin-top:4px}.etq{font-size:12px;border-radius:999px;padding:1px 8px;margin-left:6px;
-border:1px solid var(--borda)}.aberto{color:#c46a00}.feito{color:#2f9e6e}.recusado{color:#c0392b}
+border:1px solid var(--borda)}.aberto{color:#c46a00}.feito{color:#2f9e6e}.recusado{color:#c0392b}.substituido{color:#888;text-decoration:line-through}.caixa{border-left:4px solid var(--destaque)}
 .link{color:var(--destaque);font-weight:500}#grafo{width:100%;height:520px;background:var(--cartao);
 border:1px solid var(--borda);border-radius:12px}.leg span{display:inline-block;margin-right:14px;font-size:13px}
 .leg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
@@ -74,6 +75,12 @@ def gerar(notas: dict[str, Nota], titulo: str = "segundo-cerebro") -> str:
             f"<div class='corpo'>{_texto(r.corpo)}</div></div>" for r in fio)
         fios += f"<div class='fio'><h3>{html.escape(str(fio[0].meta.get('assunto', fio[0].nome)))}</h3>{msgs}</div>"
 
+    pendentes = abertos_para_humano(notas)
+    caixa_html = "".join(
+        f"<div class='cartao caixa'><div class='det'>pedido: {html.escape(pedido)}</div>"
+        f"<h3>{html.escape(str(lista[-1].meta.get('assunto')))}</h3><div class='corpo'>{_texto(lista[-1].corpo)}</div></div>"
+        for pedido, lista in sorted(pendentes.items(), key=lambda g: str(g[1][-1].meta.get("criado")), reverse=True)) or "<p class='det'>Nada esperando pelo Arthur.</p>"
+
     legenda = "".join(f"<span><i style='background:{c}'></i>{p}</span>" for p, c in CORES.items())
     dados = json.dumps(_grafo(notas), ensure_ascii=False)
 
@@ -84,6 +91,8 @@ def gerar(notas: dict[str, Nota], titulo: str = "segundo-cerebro") -> str:
 <p class="sub">Um cofre do Obsidian onde agentes de IA trabalham e conversam por recados. Gerado a partir das notas em {date.today():%d/%m/%Y}.</p>
 <div class="num"><div><b>{len(notas)}</b>notas</div><div><b>{len(agentes(notas))}</b>agentes</div>
 <div><b>{len(todos_recados)}</b>recados</div><div><b>{status.get('aberto', 0)}</b>abertos</div><div><b>{status.get('feito', 0)}</b>resolvidos</div></div>
+<h2>Esperando pelo Arthur</h2><p class="sub">Só o Maestro fala com o humano, e só o recado mais recente de cada pedido fica aberto.</p>
+<div class="grade">{caixa_html}</div>
 <h2>Agentes</h2><div class="grade">{cartoes}</div>
 <h2>Grafo do cofre</h2><p class="sub">Cada ponto é uma nota; cada linha, um link [[...]]. Arraste para explorar.</p>
 <div class="leg">{legenda}</div><svg id="grafo"></svg>

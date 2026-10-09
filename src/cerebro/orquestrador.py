@@ -18,11 +18,13 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Protocol
 
+from . import caixa
 from .cofre import Nota, ler_cofre
 from .mural import HUMANO, recados
 
@@ -33,6 +35,7 @@ _COMANDOS = ["cerebro", "ls", "mv", "gh run list", "git log"]
 FERRAMENTAS = ["Read", "Write", "Edit", "Glob", "Grep",
                *(f"{shell}({c}:*)" for shell in ("Bash", "PowerShell") for c in _COMANDOS)]
 CICLO_COMPLETO = "nenhum recado aberto para agentes"
+ENTRADA = "nota nova na Entrada: "
 
 
 class Executor(Protocol):
@@ -46,12 +49,14 @@ class Turno:
     fechados: int
     novos: int
     saida: str = ""
+    segundos: float = 0.0
 
 
 @dataclass
 class Execucao:
     turnos: list[Turno] = field(default_factory=list)
     parou_por: str = ""
+    substituidos: int = 0
 
 
 def _abertos(notas: dict[str, Nota]) -> list[Nota]:
@@ -70,12 +75,19 @@ def proximo(notas: dict[str, Nota], ja_viu_entrada: set[str]) -> tuple[str, str]
             return para, f"recado aberto: {r.nome}"
     novas = [n for n in _entrada_pendente(notas) if n.nome not in ja_viu_entrada]
     if novas:
-        return "maestro", f"nota nova na Entrada: {novas[0].nome}"
+        return "maestro", f"{ENTRADA}{novas[0].nome}"
     return None
 
 
 def instrucao(agente: str, motivo: str) -> str:
-    return (f"Você foi acordado pelo laço automático do segundo-cerebro ({motivo}). Siga as regras do CLAUDE.md "
+    pedido = ""
+    if motivo.startswith(ENTRADA):
+        nome = motivo[len(ENTRADA):]
+        pedido = (f'Este é um pedido novo: em TODO recado que abrir para ele, use `--pedido "{nome}"`, para a '
+                  f"conversa ficar agrupada. ")
+    return (f"Você foi acordado pelo laço automático do segundo-cerebro ({motivo}). {pedido}"
+            f"Só o maestro escreve para `{HUMANO}`; os outros agentes entregam o resultado final ao maestro. "
+            f"Siga as regras do CLAUDE.md "
             f"e da sua nota em Agentes/. Comece com `cerebro mural --para {agente}`, trate o que for seu, deixe "
             f"recados para quem age em seguida (com --responde), feche o que resolveu com `cerebro fechar`, "
             f"e termine com `cerebro validar` sem problemas. Rode UM comando por vez, sem encadear com ; ou &&. "
@@ -127,7 +139,7 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
             execucao.parou_por = f"limite de {max_turnos} turnos"
             break
         agente, motivo = quem
-        if motivo.startswith("nota nova"):
+        if motivo.startswith(ENTRADA):
             for n in _entrada_pendente(notas):
                 ja_viu_entrada.add(n.nome)
                 marcar(raiz / n.caminho, "encaminhado")
@@ -135,11 +147,13 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
         total_antes = len(recados(notas))
 
         aviso(f"[{len(execucao.turnos) + 1}] {agente} ← {motivo}")
+        inicio = time.perf_counter()
         saida = executor(agente, instrucao(agente, motivo), raiz)
+        segundos = time.perf_counter() - inicio
 
         depois_notas = ler_cofre(raiz)
         ainda = {r.nome for r in _abertos(depois_notas)}
-        turno = Turno(agente, motivo, len(antes - ainda), len(recados(depois_notas)) - total_antes, saida)
+        turno = Turno(agente, motivo, len(antes - ainda), len(recados(depois_notas)) - total_antes, saida, segundos)
         execucao.turnos.append(turno)
         trabalhou = True
         aviso(f"    fechou {turno.fechados}, criou {turno.novos}" + (f" · {saida.splitlines()[0][:120]}" if saida else ""))
@@ -149,9 +163,14 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
 
     if trabalhou and diario and execucao.parou_por == CICLO_COMPLETO:
         aviso("[fim] secretario ← escrever o diário do ciclo")
-        execucao.turnos.append(Turno("secretario", "diário do ciclo", 0, 0,
-                                     executor("secretario", instrucao("secretario", "fim do ciclo: escreva/atualize o Diário de hoje e processe a Entrada"), raiz)))
+        inicio = time.perf_counter()
+        saida = executor("secretario", instrucao("secretario", "fim do ciclo: escreva/atualize o Diário de hoje e processe a Entrada"), raiz)
+        execucao.turnos.append(Turno("secretario", "diário do ciclo", 0, 0, saida, time.perf_counter() - inicio))
     if trabalhou:
+        execucao.substituidos = caixa.consolidar(raiz)
+        caixa.gerar_nota(raiz)
+        if execucao.substituidos:
+            aviso(f"[caixa] {execucao.substituidos} recado(s) antigo(s) para {HUMANO} substituído(s) pelo mais recente do pedido")
         _registrar(raiz, execucao)
     aviso(f"Fim: {execucao.parou_por}. {len(execucao.turnos)} turnos.")
     return execucao
@@ -161,7 +180,7 @@ def _registrar(raiz: Path, execucao: Execucao) -> Path:
     agora = datetime.now()
     destino = raiz / "Diario" / f"Execucao {agora:%Y-%m-%d %H%M}.md"
     destino.parent.mkdir(exist_ok=True)
-    linhas = "\n".join(f"| {i} | {t.agente} | {t.motivo} | {t.fechados} | {t.novos} |"
+    linhas = "\n".join(f"| {i} | {t.agente} | {t.motivo} | {t.fechados} | {t.novos} | {t.segundos:.0f} s |"
                        for i, t in enumerate(execucao.turnos, 1))
     respostas = "\n\n".join(f"**{i}. {t.agente}:** " + " ".join(t.saida.split())[:600]
                               for i, t in enumerate(execucao.turnos, 1) if t.saida)
@@ -172,10 +191,10 @@ turnos: {len(execucao.turnos)}
 ---
 # Execução do laço automático · {agora:%d/%m/%Y %H:%M}
 
-Parou por: {execucao.parou_por}.
+Parou por: {execucao.parou_por}. Recados para {HUMANO} substituídos pelo mais recente do pedido: {execucao.substituidos}. Decisões pendentes: [[Caixa do Arthur]].
 
-| # | Agente | Por quê | Recados fechados | Recados criados |
-|---|---|---|---|---|
+| # | Agente | Por quê | Recados fechados | Recados criados | Tempo |
+|---|---|---|---|---|---|
 {linhas}
 
 ## O que cada agente respondeu

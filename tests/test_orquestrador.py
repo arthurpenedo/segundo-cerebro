@@ -26,7 +26,7 @@ def _fechar_meus(raiz: Path, agente: str) -> list[str]:
 
 
 def roteiro(raiz: Path):
-    """Executor falso: maestro delega ao dev, dev pede revisão, crítico aprova e devolve ao arthur."""
+    """Executor falso: maestro delega ao dev, dev pede revisão, crítico aprova, maestro leva ao arthur."""
     chamadas = []
 
     def executar(agente, instrucao, raiz_):
@@ -34,11 +34,14 @@ def roteiro(raiz: Path):
         meus = _fechar_meus(raiz_, agente)
         pai = meus[0] if meus else None
         if agente == "maestro" and not meus:
-            mural.escrever_recado(raiz_, "maestro", "dev", "Fazer X", "Faça X.")
+            mural.escrever_recado(raiz_, "maestro", "dev", "Fazer X", "Faça X.", pedido="Pedido")
+            mural.escrever_recado(raiz_, "maestro", "arthur", "X em andamento", "Começamos.", pedido="Pedido")
+        elif agente == "maestro":
+            mural.escrever_recado(raiz_, "maestro", "arthur", "X pronto", "Aprovado, publique.", responde=pai)
         elif agente == "dev":
             mural.escrever_recado(raiz_, "dev", "critico", "Revisar X", "Pronto, revisa.", responde=pai)
         elif agente == "critico":
-            mural.escrever_recado(raiz_, "critico", "arthur", "X aprovado", "Aprovado, publique.", responde=pai)
+            mural.escrever_recado(raiz_, "critico", "maestro", "X aprovado", "Aprovado.", responde=pai)
         return f"{agente} ok"
 
     return executar, chamadas
@@ -49,10 +52,15 @@ def test_laco_acorda_cada_agente_ate_sobrar_so_decisao_humana(tmp_path):
     executar, chamadas = roteiro(raiz)
     execucao = orquestrador.rodar(raiz, executar, aviso=lambda _: None)
 
-    assert chamadas == ["maestro", "dev", "critico", "secretario"]
+    assert chamadas == ["maestro", "dev", "critico", "maestro", "secretario"]
     assert execucao.parou_por == orquestrador.CICLO_COMPLETO
-    abertos = [r for r in mural.recados(cofre.ler_cofre(raiz)) if r.meta["status"] == "aberto"]
-    assert [r.meta["para"] for r in abertos] == ["arthur"]  # recado humano não acorda ninguém
+    notas = cofre.ler_cofre(raiz)
+    abertos = [r for r in mural.recados(notas) if r.meta["status"] == "aberto"]
+    # recado humano não acorda ninguém, e do pedido só sobra o mais recente para o arthur
+    assert [(r.meta["para"], r.meta["assunto"]) for r in abertos] == [("arthur", "X pronto")]
+    assert all(r.meta.get("pedido") == "Pedido" for r in mural.recados(notas))  # herdado por --responde
+    assert execucao.substituidos == 1
+    assert "X pronto" in (raiz / "Caixa do Arthur.md").read_text(encoding="utf-8")
     registro = list((raiz / "Diario").glob("Execucao *.md"))
     assert len(registro) == 1 and "| 2 | dev |" in registro[0].read_text(encoding="utf-8")
 
@@ -115,3 +123,22 @@ def test_falha_nao_acorda_secretario_e_registra_respostas(tmp_path):
     assert chamadas == ["dev"]
     registro = next((raiz / "Diario").glob("Execucao *.md")).read_text(encoding="utf-8")
     assert "**1. dev:** Travei: sem permissão." in registro
+
+
+def test_caixa_deixa_so_o_mais_recente_por_pedido(tmp_path):
+    from datetime import datetime
+
+    from cerebro import caixa
+
+    raiz = _cofre(tmp_path)
+    for hora, assunto, pedido in ((9, "A começou", "Pedido A"), (10, "B começou", "Pedido B"),
+                                  (11, "A pronto", "Pedido A")):
+        mural.escrever_recado(raiz, "maestro", "arthur", assunto, "...", pedido=pedido,
+                              hoje=datetime(2026, 10, 9, hora))
+    assert caixa.consolidar(raiz) == 1
+    grupos = caixa.abertos_para_humano(cofre.ler_cofre(raiz))
+    assert {p: [r.meta["assunto"] for r in l] for p, l in grupos.items()} == {"Pedido A": ["A pronto"], "Pedido B": ["B começou"]}
+    antigo = next((raiz / "Mural").glob("*a-comecou.md")).read_text(encoding="utf-8")
+    assert "status: substituido" in antigo and "Substituído por [[2026-10-09 maestro para arthur a-pronto]]" in antigo
+    nota = caixa.gerar_nota(raiz).read_text(encoding="utf-8")
+    assert nota.index("A pronto") < nota.index("B começou")  # pedido com novidade mais recente primeiro

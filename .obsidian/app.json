@@ -1,10 +1,11 @@
 {
   "userIgnoreFilters": [
-    "src/",
-    "tests/",
-    "site/",
+    "LICENSE",
+    "docs/",
     "pyproject.toml",
-    "LICENSE"
+    "site/",
+    "src/",
+    "tests/"
   ],
   "alwaysUpdateLinks": true,
   "newFileLocation": "folder",

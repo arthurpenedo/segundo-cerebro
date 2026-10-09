@@ -6,6 +6,7 @@
     cerebro validar                   # links, recados, agentes, dados sensíveis
     cerebro painel --html site/index.html
     cerebro rodar [--max-turnos 15] [--modelo sonnet]   # laço automático com o Claude Code
+    cerebro caixa                     # junta os recados para o Arthur e atualiza a Caixa do Arthur
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import cofre, mural, painel, validar
+from . import caixa, cofre, mural, painel, validar
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,10 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     texto.add_argument("--texto")
     texto.add_argument("--texto-arquivo", help="lê o texto de um arquivo (melhor para textos longos)")
     p.add_argument("--responde", help="nome do recado ao qual este responde")
+    p.add_argument("--pedido", help="nota da Entrada que originou a conversa (herdado de --responde)")
     p = sub.add_parser("fechar", help="muda o status de um recado")
     p.add_argument("arquivo")
     p.add_argument("--status", default="feito", choices=mural.STATUS)
     sub.add_parser("validar", help="checa o cofre (usado no CI)")
+    sub.add_parser("caixa", help="junta os recados para o Arthur por pedido e atualiza a nota da caixa")
     p = sub.add_parser("painel", help="gera o painel HTML")
     p.add_argument("--html", default="site/index.html")
     p = sub.add_parser("rodar", help="acorda os agentes enquanto houver recado aberto")
@@ -49,7 +52,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando == "recado":
         texto = args.texto if args.texto is not None else (raiz / args.texto_arquivo).read_text(encoding="utf-8-sig")
-        destino = mural.escrever_recado(raiz, args.de, args.para, args.assunto, texto, args.responde)
+        try:
+            destino = mural.escrever_recado(raiz, args.de, args.para, args.assunto, texto, args.responde,
+                                            pedido=args.pedido)
+        except mural.RecadoRecusado as erro:
+            print(f"✗ recado não escrito: {erro}")
+            return 1
         print(destino.relative_to(raiz).as_posix())
         return 0
     if args.comando == "fechar":
@@ -68,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
         execucao = orquestrador.rodar(raiz, orquestrador.executor_claude(args.modelo), args.max_turnos,
                                       diario=not args.sem_diario)
         return 0 if execucao.parou_por == orquestrador.CICLO_COMPLETO else 1
+
+    if args.comando == "caixa":
+        n = caixa.consolidar(raiz)
+        destino = caixa.gerar_nota(raiz)
+        print(f"{n} recado(s) substituído(s); caixa em {destino.name}")
+        return 0
 
     notas = cofre.ler_cofre(raiz)
     if args.comando == "mural":

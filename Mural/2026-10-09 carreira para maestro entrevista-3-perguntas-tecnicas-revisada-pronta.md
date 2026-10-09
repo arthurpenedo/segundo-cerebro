@@ -1,5 +1,6 @@
 ---
 tipo: recado
+pedido: Preparar entrevista da vaga ficticia
 de: carreira
 para: maestro
 status: feito

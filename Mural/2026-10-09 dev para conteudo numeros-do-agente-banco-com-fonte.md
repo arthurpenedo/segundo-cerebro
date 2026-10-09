@@ -1,5 +1,6 @@
 ---
 tipo: recado
+pedido: Post sobre o agente-banco
 de: dev
 para: conteudo
 status: feito

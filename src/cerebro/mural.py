@@ -18,18 +18,19 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
 
 from .cofre import Nota
 
-STATUS = ("aberto", "feito", "recusado")
+STATUS = ("aberto", "feito", "recusado", "substituido")
 HUMANO = "arthur"
 
 
 def recados(notas: dict[str, Nota]) -> list[Nota]:
+    # `criado` tem data e hora ("2026-10-09 14:05:31"); recados antigos só têm a data e ficam antes no mesmo dia.
     return sorted((n for n in notas.values() if n.tipo == "recado"),
                   key=lambda n: (str(n.meta.get("criado", "")), n.nome))
 
@@ -70,18 +71,46 @@ def _slug(texto: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", sem_acento.lower()).strip("-")[:50]
 
 
+class RecadoRecusado(ValueError):
+    """Regra do Mural violada: o recado não é escrito."""
+
+
+def _meta_do_recado(raiz: Path, nome: str) -> dict:
+    arquivo = raiz / "Mural" / f"{nome}.md"
+    if not arquivo.is_file():
+        return {}
+    texto = arquivo.read_text(encoding="utf-8")
+    m = re.match(r"---\r?\n(.*?)\r?\n---", texto, re.S)
+    return (yaml.safe_load(m.group(1)) or {}) if m else {}
+
+
 def escrever_recado(raiz: str | Path, de: str, para: str, assunto: str, texto: str,
-                    responde: str | None = None, hoje: date | None = None) -> Path:
-    """Cria Mural/AAAA-MM-DD de-para assunto.md. Usado pelos agentes via `cerebro recado`."""
-    hoje = hoje or date.today()
-    pasta = Path(raiz) / "Mural"
+                    responde: str | None = None, hoje: date | datetime | None = None,
+                    pedido: str | None = None) -> Path:
+    """Cria Mural/AAAA-MM-DD de para para assunto.md. Usado pelos agentes via `cerebro recado`.
+
+    Regras aplicadas aqui, no código (não só no prompt dos agentes):
+    - só o maestro escreve para o Arthur, para ele receber uma voz só;
+    - o recado herda o `pedido` do recado ao qual responde, para agrupar a conversa por pedido.
+    """
+    raiz = Path(raiz)
+    if para.lower() == HUMANO and de.lower() != "maestro":
+        raise RecadoRecusado(f"só o maestro fala com o {HUMANO}: mande este recado para o maestro "
+                             f"(--para maestro) e ele leva ao {HUMANO}")
+    quando = hoje or datetime.now()
+    pasta = raiz / "Mural"
     pasta.mkdir(parents=True, exist_ok=True)
     # Só ASCII no nome do arquivo: o PowerShell do Windows não repassa bem caracteres como "→" para os comandos.
-    base = f"{hoje.isoformat()} {de} para {para} {_slug(assunto)}"
+    base = f"{quando.strftime('%Y-%m-%d')} {de} para {para} {_slug(assunto)}"
     destino, n = pasta / f"{base}.md", 2
     while destino.exists():
         destino, n = pasta / f"{base}-{n}.md", n + 1
-    meta = {"tipo": "recado", "de": de, "para": para, "status": "aberto", "criado": hoje.isoformat(), "assunto": assunto}
+    criado = quando.isoformat(sep=" ", timespec="seconds") if isinstance(quando, datetime) else quando.isoformat()
+    if responde and not pedido:
+        pedido = _meta_do_recado(raiz, responde).get("pedido")
+    meta = {"tipo": "recado", "de": de, "para": para, "status": "aberto", "criado": criado, "assunto": assunto}
+    if pedido:
+        meta["pedido"] = str(pedido).strip("[]")
     if responde:
         meta["responde"] = responde
     cabecalho = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False).strip()

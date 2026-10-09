@@ -9,6 +9,8 @@ trabalho dos agentes. Comece por `Inicio.md` e `Agentes/Como os agentes trabalha
 - **Público:** este cofre é vitrine. Nunca escreva CPF, cartão, chave de API, dado de cliente ou candidatura real.
   `cerebro validar` barra os casos óbvios, mas a responsabilidade é de quem escreve.
 - **Números:** só com fonte (nota de projeto ou README do repositório).
+- **Uma voz só para o Arthur:** só o `maestro` escreve recado para `arthur` (o `cerebro recado` recusa os outros). Os demais entregam o resultado ao maestro.
+- **Pedido:** recado que começa um pedido da Entrada leva `--pedido "<nome da nota>"`; as respostas herdam sozinhas via `--responde`. No fim do ciclo, só o recado mais recente de cada pedido fica aberto para o Arthur, na [[Caixa do Arthur]].
 - **Fora do cofre** (publicar, deploy, mandar mensagem, gastar dinheiro): vira recado para `arthur`.
 - **Comandos:** um por vez, sem encadear. Texto longo de recado vai por arquivo: `--texto-arquivo .rascunhos/<nome>.txt`.
 - **Laço automático:** `cerebro rodar` acorda o agente com recado aberto mais antigo até sobrar só recado para `arthur`.

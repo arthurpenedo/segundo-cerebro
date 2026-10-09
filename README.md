@@ -86,13 +86,35 @@ Resultado: [3 perguntas prováveis com respostas e fonte de cada número](Carrei
 e uma [nota de revisão](Conhecimento/Revisao%20para%20entrevista%20-%20agentes%20com%20ferramentas.md). O Carreira
 deixou de fora, por conta própria, números que não conseguiu conferir.
 
+## Uma voz só para o humano
+
+Nos dois primeiros pedidos, o Arthur recebeu recados demais sobre o mesmo assunto ("em andamento", "pronto",
+"pronto de novo", e um do Carreira direto). A correção virou regra no **código**, não no prompt:
+
+- **Só o Maestro escreve para `arthur`.** O `cerebro recado` recusa qualquer outro remetente com a mensagem
+  "mande para o maestro", e o `cerebro validar` pega quem tentar escrever o arquivo à mão.
+- **Todo recado sabe de qual pedido veio.** O Maestro abre a conversa com `--pedido "<nota da Entrada>"`; as
+  respostas herdam o campo sozinhas via `--responde`.
+- **No fim do ciclo, um recado por pedido.** Os recados anteriores para o Arthur viram `substituido`, com link
+  para o novo, e a nota [Caixa do Arthur](Caixa%20do%20Arthur.md) lista o que falta decidir, pedido por pedido.
+  O painel mostra a mesma caixa no topo.
+
+Ao implementar, apareceu um bug escondido: dentro do mesmo dia, os recados eram ordenados **alfabeticamente**,
+não por horário, o que afetava quem acordava primeiro e qual era "o mais recente". Agora `criado` guarda data e hora.
+
+**Teste com um pedido novo** (*"campanha da By.penas para o Dia das Crianças"*): Maestro → Marketing → Crítico
+(**ajustar**: 12/10/2026 é segunda, não domingo como estava no pedido) → Marketing → Maestro → Arthur. Ciclo completo em 6 turnos,
+os 5 recados com o mesmo `pedido` e **um único** recado na caixa. A [campanha](Projetos/Campanha%20Dia%20das%20Criancas%20By.penas.md)
+ainda lembra de pedir autorização de imagem se aparecer criança no vídeo.
+
 ## Como funciona por dentro
 
 ```
 cerebro mural --para dev                 # o que está esperando pelo agente
 cerebro recado --de dev --para conteudo --assunto "..." --texto "..." --responde "<recado>"
 cerebro fechar "revisar-post"            # aberto -> feito (aceita um trecho único do nome)
-cerebro rodar --max-turnos 12            # laço automático
+cerebro rodar --max-turnos 12            # laço automático (ou dois cliques em "Rodar agentes.cmd")
+cerebro caixa                            # junta os recados para o Arthur e atualiza a caixa
 cerebro validar                          # roda no CI
 cerebro painel --html site/index.html    # painel do Pages
 ```
@@ -108,19 +130,20 @@ cerebro painel --html site/index.html    # painel do Pages
 
 ```bash
 pip install -e ".[dev]"
-pytest -q            # 14 testes (o laço é testado com um executor falso)
+pytest -q            # 17 testes (o laço é testado com um executor falso)
 cerebro validar
 ```
 
 Para abrir como segundo cérebro: Obsidian → *Abrir pasta como cofre* → esta pasta. Para pôr os agentes para
-trabalhar: escreva um pedido em `00-Entrada/` (pode ser pelo próprio Obsidian) e rode `cerebro rodar`.
+trabalhar: escreva um pedido em `00-Entrada/` (pode ser pelo próprio Obsidian) e rode `cerebro rodar` (ou clique duas vezes em `Rodar agentes.cmd`). O que precisa de você aparece na Caixa do Arthur.
 
 ## Limites honestos
 
 - O laço roda na máquina (precisa do Claude Code instalado); o CI só valida e publica. Os agentes rodam um por
   vez, de propósito: a ordem fica legível no Mural.
-- Os agentes ainda são verbosos com o humano: no segundo ciclo o Arthur recebeu mais de um recado sobre o mesmo
-  assunto. Agrupar recados para `arthur` é a próxima melhoria.
+- `criado` tem precisão de segundos: dois recados no mesmo segundo são desempatados pelo nome. Com agentes
+  reais (turnos de 20 a 60 s) isso não acontece; os recados de antes da mudança tiveram a ordem corrigida à mão.
+- Responder ao Arthur ainda é manual: ele muda o `status` do recado no Obsidian ou escreve um pedido novo.
 - O validador de dados sensíveis usa padrões simples. Ele pega os casos óbvios, não substitui o
   [lgpd-guard](https://github.com/arthurpenedo/lgpd-guard).
 - Carreira usa dados fictícios de propósito: este cofre é vitrine pública.

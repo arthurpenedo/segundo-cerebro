@@ -52,6 +52,9 @@ def validar(notas: dict[str, Nota]) -> list[Problema]:
             quem = str(r.meta.get(campo, "")).lower()
             if quem and quem not in ids:
                 problemas.append(Problema(str(r.caminho), f"'{campo}: {quem}' não é um agente do cofre"))
+        if r.meta.get("status") == "aberto" and str(r.meta.get("para", "")).lower() == HUMANO \
+                and str(r.meta.get("de", "")).lower() != "maestro":
+            problemas.append(Problema(str(r.caminho), f"só o maestro escreve para o {HUMANO}"))
         pai = str(r.meta.get("responde") or "").strip("[]")
         if pai and resolver(notas, pai) is None:
             problemas.append(Problema(str(r.caminho), f"responde a um recado que não existe: {pai}"))

@@ -104,3 +104,29 @@ def test_fechar_por_trecho_do_nome_e_nome_so_ascii(tmp_path, capsys):
     assert "status: feito" in a.read_text(encoding="utf-8")
     assert main(["--cofre", str(raiz), "fechar", "dev para critico"]) == 1  # ambíguo: não fecha nada
     assert "bate com 2 recados" in capsys.readouterr().out
+
+
+def test_so_o_maestro_fala_com_o_arthur(tmp_path, capsys):
+    raiz = _cofre(tmp_path)
+    try:
+        mural.escrever_recado(raiz, "dev", "arthur", "Pronto", "x")
+        assert False, "deveria recusar"
+    except mural.RecadoRecusado as erro:
+        assert "mande este recado para o maestro" in str(erro)
+    assert not (raiz / "Mural").exists() or not list((raiz / "Mural").glob("*.md"))
+    assert main(["--cofre", str(raiz), "recado", "--de", "dev", "--para", "arthur", "--assunto", "x", "--texto", "y"]) == 1
+    assert "recado não escrito" in capsys.readouterr().out
+    # escrito à mão, fora do comando: o validador pega
+    (raiz / "Mural").mkdir(exist_ok=True)
+    (raiz / "Mural" / "manual.md").write_text("---\ntipo: recado\nde: dev\npara: arthur\nstatus: aberto\n"
+                                              "criado: 2026-10-09\nassunto: x\n---\nx", encoding="utf-8")
+    assert any("só o maestro" in str(p) for p in validar.validar(cofre.ler_cofre(raiz)))
+
+
+def test_pedido_e_herdado_pela_resposta(tmp_path):
+    raiz = _cofre(tmp_path)
+    a = mural.escrever_recado(raiz, "dev", "critico", "Revisar", "x", pedido="[[Post sobre algo]]")
+    b = mural.escrever_recado(raiz, "critico", "dev", "Aprovado", "ok", responde=a.stem)
+    notas = cofre.ler_cofre(raiz)
+    assert notas[a.stem.lower()].meta["pedido"] == "Post sobre algo"
+    assert notas[b.stem.lower()].meta["pedido"] == "Post sobre algo"
