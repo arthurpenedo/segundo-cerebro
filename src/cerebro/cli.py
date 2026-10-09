@@ -7,6 +7,8 @@
     cerebro painel --html site/index.html
     cerebro rodar [--max-turnos 15] [--modelo sonnet]   # laço automático com o Claude Code
     cerebro caixa                     # junta os recados para o Arthur e atualiza a Caixa do Arthur
+    cerebro hoje                      # dia a dia: gera Hoje.md a partir de Tarefas.md e Para o Claude.md
+    cerebro rotina                    # dia a dia: o assistente faz a fila "Para o Claude" sozinho
 """
 
 from __future__ import annotations
@@ -40,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--status", default="feito", choices=mural.STATUS)
     sub.add_parser("validar", help="checa o cofre (usado no CI)")
     sub.add_parser("caixa", help="junta os recados para o Arthur por pedido e atualiza a nota da caixa")
+    sub.add_parser("hoje", help="gera a nota Hoje a partir das tarefas e da fila do Claude")
+    p = sub.add_parser("rotina", help="o assistente executa sozinho a fila 'Para o Claude' e atualiza Hoje")
+    p.add_argument("--modelo", default="sonnet")
     p = sub.add_parser("painel", help="gera o painel HTML")
     p.add_argument("--html", default="site/index.html")
     p = sub.add_parser("rodar", help="acorda os agentes enquanto houver recado aberto")
@@ -77,6 +82,14 @@ def main(argv: list[str] | None = None) -> int:
                                       diario=not args.sem_diario)
         return 0 if execucao.parou_por == orquestrador.CICLO_COMPLETO else 1
 
+    if args.comando in ("hoje", "rotina"):
+        from . import dia
+
+        if args.comando == "hoje":
+            print(f"Atualizado: {dia.gerar_hoje(raiz).name}")
+        else:
+            print(dia.rodar_rotina(raiz, modelo=args.modelo))
+        return 0
     if args.comando == "caixa":
         n = caixa.consolidar(raiz)
         destino = caixa.gerar_nota(raiz)

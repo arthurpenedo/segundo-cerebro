@@ -107,6 +107,25 @@ não por horário, o que afetava quem acordava primeiro e qual era "o mais recen
 os 5 recados com o mesmo `pedido` e **um único** recado na caixa. A [campanha](Projetos/Campanha%20Dia%20das%20Criancas%20By.penas.md)
 ainda lembra de pedir autorização de imagem se aparecer criança no vídeo.
 
+## Modo dia a dia (cofre pessoal, privado)
+
+O mesmo motor também roda um **cofre pessoal**, separado deste e que nunca vai para o GitHub. Aqui ficam só o
+código e a ideia; tarefas, vagas e rascunhos reais ficam no PC do dono.
+
+- `Tarefas.md` usa o formato do plugin Tasks do Obsidian: `- [ ] Pagar a conta 📅 2026-10-10`.
+- `Para o Claude.md` é a **fila de instruções para quando o dono não está**. Ele escreve ali, e o próprio
+  assistente também, quando vê algo que dá para adiantar na próxima rodada.
+- `cerebro rotina` roda sozinha nos dias úteis às 8h (Agendador de Tarefas do Windows): o Claude Code faz os
+  itens da fila, marca `[x]` com o link do resultado e regenera `Hoje.md` (atrasado, hoje, próximos 7 dias, o
+  que está pronto para revisar, o que ele fez).
+- **Limites no código:** a rotina só recebe ferramentas para ler e escrever no cofre e pesquisar na web. Mandar
+  mensagem, publicar, se candidatar, pagar ou fazer login não estão disponíveis; quando uma instrução pede isso,
+  ela prepara o rascunho e cria uma tarefa para o dono.
+
+Na primeira rodada real, a rotina fez 2 de 3 instruções. Ela percebeu sozinha que a segunda-feira era feriado ao
+montar o plano da semana. Na busca de vagas, preferiu deixar o item pendente e **escrever uma instrução melhor
+para si mesma** em vez de inventar vagas que não conseguiu confirmar.
+
 ## Como funciona por dentro
 
 ```
@@ -115,6 +134,8 @@ cerebro recado --de dev --para conteudo --assunto "..." --texto "..." --responde
 cerebro fechar "revisar-post"            # aberto -> feito (aceita um trecho único do nome)
 cerebro rodar --max-turnos 12            # laço automático (ou dois cliques em "Rodar agentes.cmd")
 cerebro caixa                            # junta os recados para o Arthur e atualiza a caixa
+cerebro --cofre ~/Cerebro hoje           # dia a dia: gera Hoje.md
+cerebro --cofre ~/Cerebro rotina         # dia a dia: faz a fila "Para o Claude" sozinho
 cerebro validar                          # roda no CI
 cerebro painel --html site/index.html    # painel do Pages
 ```
@@ -130,7 +151,7 @@ cerebro painel --html site/index.html    # painel do Pages
 
 ```bash
 pip install -e ".[dev]"
-pytest -q            # 17 testes (o laço é testado com um executor falso)
+pytest -q            # 22 testes (o laço é testado com um executor falso)
 cerebro validar
 ```
 
