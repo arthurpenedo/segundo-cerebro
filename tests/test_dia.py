@@ -111,3 +111,14 @@ def test_projeto_pronto_aparece_para_revisar(tmp_path):
     (raiz / "Projetos" / "outro.md").write_text("---\nstatus: construindo\n---\n# y", encoding="utf-8")
     revisar = dia.gerar_hoje(raiz, HOJE).read_text(encoding="utf-8").split("## Para você revisar")[1].split("##")[0]
     assert "[[meu-projeto]]" in revisar and "outro" not in revisar
+
+
+def test_calendario_um_por_dia_e_aparece_no_hoje(tmp_path):
+    raiz = _cofre(tmp_path)
+    assert dia.agendar(raiz, "a", HOJE) == HOJE
+    assert dia.agendar(raiz, "b", HOJE) == date(2026, 10, 10)
+    assert dia.agendar(raiz, "c", HOJE) == date(2026, 10, 11)
+    assert dia.agendar(raiz, "a", HOJE) == HOJE  # já agendado: não duplica
+    texto = dia.gerar_hoje(raiz, HOJE).read_text(encoding="utf-8")
+    publicar = texto.split("Publicar hoje")[1].split("##")[0]
+    assert "[[a]]" in publicar and "[[b]]" not in publicar

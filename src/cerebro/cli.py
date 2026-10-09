@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validar", help="checa o cofre (usado no CI)")
     sub.add_parser("caixa", help="junta os recados para o Arthur por pedido e atualiza a nota da caixa")
     sub.add_parser("hoje", help="gera a nota Hoje a partir das tarefas e da fila do Claude")
+    p = sub.add_parser("agendar", help="põe um projeto no próximo dia livre do calendário de publicação")
+    p.add_argument("nome")
     p = sub.add_parser("rotina", help="o assistente executa sozinho a fila 'Para o Claude' e atualiza Hoje")
     p.add_argument("--modelo", default="sonnet")
     p.add_argument("--projetos", help="pasta onde a rotina pode criar projetos (commit local, nunca push)")
@@ -83,9 +85,13 @@ def main(argv: list[str] | None = None) -> int:
                                       diario=not args.sem_diario)
         return 0 if execucao.parou_por == orquestrador.CICLO_COMPLETO else 1
 
-    if args.comando in ("hoje", "rotina"):
+    if args.comando in ("hoje", "rotina", "agendar"):
         from . import dia
 
+        if args.comando == "agendar":
+            print(f"{args.nome}: {dia.agendar(raiz, args.nome):%d/%m/%Y}")
+            dia.gerar_hoje(raiz)
+            return 0
         if args.comando == "hoje":
             print(f"Atualizado: {dia.gerar_hoje(raiz).name}")
         else:
