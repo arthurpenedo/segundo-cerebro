@@ -122,3 +122,11 @@ def test_calendario_um_por_dia_e_aparece_no_hoje(tmp_path):
     texto = dia.gerar_hoje(raiz, HOJE).read_text(encoding="utf-8")
     publicar = texto.split("Publicar hoje")[1].split("##")[0]
     assert "[[a]]" in publicar and "[[b]]" not in publicar
+
+
+def test_so_dias_uteis_e_reorganizar(tmp_path):
+    raiz = _cofre(tmp_path)
+    assert dia.agendar(raiz, "a", HOJE) == HOJE  # sexta
+    assert dia.agendar(raiz, "b", HOJE) == date(2026, 10, 13)  # pula fim de semana e o feriado de 12/10
+    novo = dict(dia.reorganizar(raiz, date(2026, 10, 10)))
+    assert novo == {"a": date(2026, 10, 13), "b": date(2026, 10, 14)}

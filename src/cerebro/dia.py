@@ -67,6 +67,30 @@ def ler_tarefas(arquivo: str | Path) -> list[Tarefa]:
 
 
 CALENDARIO = "Calendario de publicacao.md"
+# Feriados nacionais fixos (MM-DD). Os móveis (Carnaval, Sexta-feira Santa, Corpus Christi) ficam de fora.
+FERIADOS = {"01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"}
+
+
+def dia_util(d: date) -> bool:
+    """Posts só em dia útil: sem sábado, domingo e feriado nacional fixo."""
+    return d.weekday() < 5 and d.strftime("%m-%d") not in FERIADOS
+
+
+def reorganizar(raiz: str | Path, inicio: date) -> list[tuple[str, date]]:
+    """Redistribui as publicações pendentes, na ordem atual, em dias úteis a partir de `inicio`."""
+    arquivo = Path(raiz) / CALENDARIO
+    linhas = arquivo.read_text(encoding="utf-8").splitlines()
+    pendentes = sorted((t for t in ler_tarefas(arquivo) if not t.feito and t.prazo), key=lambda t: t.prazo)
+    nova_data, dia = {}, inicio
+    for t in pendentes:
+        while not dia_util(dia):
+            dia += timedelta(days=1)
+        nova_data[t.linha] = dia
+        dia += timedelta(days=1)
+    for n, d in nova_data.items():
+        linhas[n - 1] = _DATA.sub(f"📅 {d.isoformat()}", linhas[n - 1])
+    arquivo.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    return [(re.search(r"\[\[(.+?)\]\]", linhas[n - 1]).group(1), d) for n, d in nova_data.items()]
 
 
 def agendar(raiz: str | Path, nome: str, hoje: date | None = None) -> date:
@@ -79,7 +103,7 @@ def agendar(raiz: str | Path, nome: str, hoje: date | None = None) -> date:
             return t.prazo
     ocupados = {t.prazo for t in entradas if t.prazo}
     dia = hoje
-    while dia in ocupados:
+    while dia in ocupados or not dia_util(dia):
         dia += timedelta(days=1)
     if not arquivo.exists():
         arquivo.write_text("# Calendário de publicação\n\nUm sistema por dia: repositório no GitHub + post no LinkedIn "
