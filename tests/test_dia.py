@@ -100,7 +100,7 @@ def test_instrucao_muda_com_pasta_de_projetos(tmp_path):
 
     com = dia.instrucao_rotina(HOJE, Path("C:/projetos"))
     sem = dia.instrucao_rotina(HOJE)
-    assert "Como criar.md" in com and "commit só local" in com
+    assert "Como criar.md" in com and "NÃO usa git" in com
     assert "não há pasta de projetos" in sem
 
 

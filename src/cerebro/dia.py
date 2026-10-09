@@ -111,8 +111,8 @@ def gerar_hoje(raiz: str | Path, hoje: date | None = None) -> Path:
 
 
 def instrucao_rotina(hoje: date, projetos: Path | None = None) -> str:
-    criar = (f"Para itens de criação, siga `Como criar.md`: código em `{projetos}`, testes rodando, commit só local "
-             f"(push e GitHub são do Arthur). " if projetos else
+    criar = (f"Para itens de criação, siga `Como criar.md`: código em `{projetos}`, testes rodando. Você NÃO usa git e NÃO cria tarefa de git: o motor faz o commit depois "
+             f"da rotina e o Claude publica no GitHub quando o Arthur está em sessão. " if projetos else
              "Nesta rotina não há pasta de projetos liberada: itens de criação viram plano/rascunho no cofre. ")
     return (
         f"Você é o assistente pessoal do Arthur e está rodando SOZINHO (rotina automática de {_data_br(hoje)}, "
