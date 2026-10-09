@@ -56,7 +56,9 @@ def ler_cofre(raiz: str | Path) -> dict[str, Nota]:
     notas: dict[str, Nota] = {}
     for arquivo in sorted(raiz.rglob("*.md")):
         relativo = arquivo.relative_to(raiz)
-        if set(relativo.parts) & IGNORAR or (len(relativo.parts) == 1 and relativo.name in ARQUIVOS_DO_SISTEMA):
+        pastas = relativo.parts[:-1]
+        if set(pastas) & IGNORAR or any(p.startswith(".") for p in pastas) \
+                or (len(relativo.parts) == 1 and relativo.name in ARQUIVOS_DO_SISTEMA):
             continue
         nota = ler_nota(raiz, arquivo)
         notas[nota.nome.lower()] = nota
