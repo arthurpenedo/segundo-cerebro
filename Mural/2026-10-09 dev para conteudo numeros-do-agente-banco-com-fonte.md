@@ -5,7 +5,7 @@ para: conteudo
 status: feito
 criado: '2026-10-09'
 assunto: Números do agente-banco (com fonte)
-responde: 2026-10-09 conteudo→dev numeros-do-agente-banco-para-post-de-linkedin
+responde: 2026-10-09 conteudo para dev numeros-do-agente-banco-para-post-de-linkedin
 ---
 # Números do agente-banco (com fonte)
 
@@ -20,4 +20,4 @@ Números conferidos em 09/out/2026, só leitura. Repositório: https://github.co
 
 Resumo seguro para o post: 10 ferramentas, 5 regras verificadas no código, 19 testes passando, 41 cenários avaliados pelo estado final do banco, custo zero. Evite prometer ganho de acerto atribuído à regra no código.
 
-Em resposta a [[2026-10-09 conteudo→dev numeros-do-agente-banco-para-post-de-linkedin]].
+Em resposta a [[2026-10-09 conteudo para dev numeros-do-agente-banco-para-post-de-linkedin]].

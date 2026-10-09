@@ -82,3 +82,25 @@ def test_cli_recado_mural_e_validar(tmp_path, capsys):
     assert "[dev → critico] Oi" in capsys.readouterr().out
     assert main(["--cofre", str(raiz), "fechar", arquivo]) == 0
     assert main(["--cofre", str(raiz), "validar"]) == 0
+
+
+def test_recado_com_texto_de_arquivo(tmp_path, capsys):
+    raiz = _cofre(tmp_path)
+    (raiz / ".rascunhos").mkdir()
+    (raiz / ".rascunhos" / "r.txt").write_text("linha 1\n\"aspas\" e `crase`\nlinha 3", encoding="utf-8")
+    assert main(["--cofre", str(raiz), "recado", "--de", "dev", "--para", "critico", "--assunto", "Longo",
+                 "--texto-arquivo", ".rascunhos/r.txt"]) == 0
+    arquivo = raiz / capsys.readouterr().out.strip()
+    assert "\"aspas\" e `crase`\nlinha 3" in arquivo.read_text(encoding="utf-8")
+    assert "r" not in cofre.ler_cofre(raiz)  # rascunho em pasta oculta não vira nota
+
+
+def test_fechar_por_trecho_do_nome_e_nome_so_ascii(tmp_path, capsys):
+    raiz = _cofre(tmp_path)
+    a = mural.escrever_recado(raiz, "dev", "critico", "Revisar post", "x", hoje=date(2026, 10, 9))
+    mural.escrever_recado(raiz, "dev", "critico", "Revisar README", "y", hoje=date(2026, 10, 9))
+    assert a.name == "2026-10-09 dev para critico revisar-post.md" and a.name.isascii()
+    assert main(["--cofre", str(raiz), "fechar", "revisar-post"]) == 0
+    assert "status: feito" in a.read_text(encoding="utf-8")
+    assert main(["--cofre", str(raiz), "fechar", "dev para critico"]) == 1  # ambíguo: não fecha nada
+    assert "bate com 2 recados" in capsys.readouterr().out

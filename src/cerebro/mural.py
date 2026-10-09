@@ -76,7 +76,8 @@ def escrever_recado(raiz: str | Path, de: str, para: str, assunto: str, texto: s
     hoje = hoje or date.today()
     pasta = Path(raiz) / "Mural"
     pasta.mkdir(parents=True, exist_ok=True)
-    base = f"{hoje.isoformat()} {de}→{para} {_slug(assunto)}"
+    # Só ASCII no nome do arquivo: o PowerShell do Windows não repassa bem caracteres como "→" para os comandos.
+    base = f"{hoje.isoformat()} {de} para {para} {_slug(assunto)}"
     destino, n = pasta / f"{base}.md", 2
     while destino.exists():
         destino, n = pasta / f"{base}-{n}.md", n + 1
@@ -89,6 +90,22 @@ def escrever_recado(raiz: str | Path, de: str, para: str, assunto: str, texto: s
         corpo += f"\nEm resposta a [[{responde}]].\n"
     destino.write_text(f"---\n{cabecalho}\n---\n{corpo}", encoding="utf-8")
     return destino
+
+
+def localizar(raiz: str | Path, referencia: str) -> Path:
+    """Acha o arquivo de um recado pelo caminho, pelo nome ou por um trecho único do nome."""
+    raiz = Path(raiz)
+    direto = Path(referencia) if Path(referencia).is_absolute() else raiz / referencia
+    if direto.is_file():
+        return direto
+    trecho = Path(referencia).stem.lower() if referencia.lower().endswith(".md") else referencia.lower()
+    candidatos = [p for p in (raiz / "Mural").glob("*.md") if trecho in p.stem.lower()]
+    if len(candidatos) == 1:
+        return candidatos[0]
+    if not candidatos:
+        raise FileNotFoundError(f"nenhum recado com '{referencia}' no nome")
+    raise ValueError(f"'{referencia}' bate com {len(candidatos)} recados; use um trecho mais específico: "
+                     + "; ".join(p.stem for p in candidatos[:5]))
 
 
 def mudar_status(arquivo: str | Path, status: str) -> None:

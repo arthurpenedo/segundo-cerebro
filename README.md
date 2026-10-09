@@ -60,12 +60,39 @@ O primeiro ciclo está todo no [Mural](Mural/) e no [Diário de 09/10/2026](Diar
 Resultado: [o post](Projetos/Post%20LinkedIn%20-%20agente-banco.md) e um achado real de código no outro projeto,
 que nenhum agente teria feito sozinho no papel de "escritor".
 
+## O laço automático
+
+`cerebro rodar` faz os agentes trabalharem sozinhos: enquanto houver recado aberto para um agente, ele acorda
+esse agente com o Claude Code em modo não interativo (`claude -p --agent <id>`, na assinatura, sem API).
+
+- Nota nova na Entrada acorda o Maestro e é marcada `encaminhado`.
+- Recado para `arthur` **não acorda ninguém**: é decisão humana e encerra o ciclo.
+- Se um agente termina o turno sem fechar nenhum recado dele, o laço **para** em vez de girar em falso.
+- Ciclo completo → o Secretário escreve o Diário. Toda execução vira uma nota `Diario/Execucao ...` com a
+  resposta de cada agente.
+- Ferramentas liberadas no modo automático: ler e escrever no cofre e o comando `cerebro`. Sem git, sem rede.
+
+O segundo pedido (*"preparar a entrevista da vaga fictícia"*) rodou assim. A primeira tentativa travou, e foi o
+próprio laço que mostrou por quê:
+
+| Rodada | O que aconteceu | O que mudei |
+|---|---|---|
+| 1 | Maestro → Carreira ok; o **Crítico** revisou mas não conseguiu enviar a resposta. O laço parou. | Suspeitei do texto longo e criei `--texto-arquivo`. Útil, mas não era a causa: ela apareceu na rodada 2. |
+| 1 | No fim, o Secretário encaminhou de novo um pedido que já estava em andamento. | O laço marca a nota da Entrada como `encaminhado`, e o diário só sai quando o ciclo termina bem. |
+| 2 | Crítico pediu **ajustes**, Carreira aplicou, mas o Maestro não conseguiu fechar recados. Dois agentes contornaram editando o arquivo; o Maestro escreveu um script para contornar, e o laço **não deixou rodar** (fora das ferramentas liberadas). | Causa raiz: o `→` no nome dos arquivos quebrava o PowerShell. Nomes agora só em ASCII, e `cerebro fechar` aceita um trecho do nome. |
+| 3 | Maestro, Pesquisador e Carreira terminaram sozinhos; o Secretário escreveu o diário. **Ciclo completo, 0 intervenções.** | — |
+
+Resultado: [3 perguntas prováveis com respostas e fonte de cada número](Carreira/Entrevista%20-%203%20perguntas%20tecnicas.md)
+e uma [nota de revisão](Conhecimento/Revisao%20para%20entrevista%20-%20agentes%20com%20ferramentas.md). O Carreira
+deixou de fora, por conta própria, números que não conseguiu conferir.
+
 ## Como funciona por dentro
 
 ```
 cerebro mural --para dev                 # o que está esperando pelo agente
 cerebro recado --de dev --para conteudo --assunto "..." --texto "..." --responde "<recado>"
-cerebro fechar "Mural/<recado>.md"       # aberto -> feito
+cerebro fechar "revisar-post"            # aberto -> feito (aceita um trecho único do nome)
+cerebro rodar --max-turnos 12            # laço automático
 cerebro validar                          # roda no CI
 cerebro painel --html site/index.html    # painel do Pages
 ```
@@ -81,17 +108,19 @@ cerebro painel --html site/index.html    # painel do Pages
 
 ```bash
 pip install -e ".[dev]"
-pytest -q            # 5 testes
+pytest -q            # 14 testes (o laço é testado com um executor falso)
 cerebro validar
 ```
 
 Para abrir como segundo cérebro: Obsidian → *Abrir pasta como cofre* → esta pasta. Para pôr os agentes para
-trabalhar: abra o Claude Code nesta pasta, escreva um pedido em `00-Entrada/` e peça ao `maestro` para começar.
+trabalhar: escreva um pedido em `00-Entrada/` (pode ser pelo próprio Obsidian) e rode `cerebro rodar`.
 
 ## Limites honestos
 
-- A orquestração ainda é manual: alguém (eu, pelo Claude Code) chama o próximo agente. Um laço automático
-  "enquanto houver recado aberto, acorde o destinatário" é o próximo passo.
+- O laço roda na máquina (precisa do Claude Code instalado); o CI só valida e publica. Os agentes rodam um por
+  vez, de propósito: a ordem fica legível no Mural.
+- Os agentes ainda são verbosos com o humano: no segundo ciclo o Arthur recebeu mais de um recado sobre o mesmo
+  assunto. Agrupar recados para `arthur` é a próxima melhoria.
 - O validador de dados sensíveis usa padrões simples. Ele pega os casos óbvios, não substitui o
   [lgpd-guard](https://github.com/arthurpenedo/lgpd-guard).
 - Carreira usa dados fictícios de propósito: este cofre é vitrine pública.

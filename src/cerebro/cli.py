@@ -5,6 +5,7 @@
     cerebro fechar "Mural/2026-10-09 ... .md" [--status feito]
     cerebro validar                   # links, recados, agentes, dados sensíveis
     cerebro painel --html site/index.html
+    cerebro rodar [--max-turnos 15] [--modelo sonnet]   # laço automático com o Claude Code
 """
 
 from __future__ import annotations
@@ -26,8 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("mural", help="recados abertos")
     p.add_argument("--para", help="só os recados para este agente")
     p = sub.add_parser("recado", help="deixa um recado para outro agente")
-    for campo in ("de", "para", "assunto", "texto"):
+    for campo in ("de", "para", "assunto"):
         p.add_argument(f"--{campo}", required=True)
+    texto = p.add_mutually_exclusive_group(required=True)
+    texto.add_argument("--texto")
+    texto.add_argument("--texto-arquivo", help="lê o texto de um arquivo (melhor para textos longos)")
     p.add_argument("--responde", help="nome do recado ao qual este responde")
     p = sub.add_parser("fechar", help="muda o status de um recado")
     p.add_argument("arquivo")
@@ -35,18 +39,35 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validar", help="checa o cofre (usado no CI)")
     p = sub.add_parser("painel", help="gera o painel HTML")
     p.add_argument("--html", default="site/index.html")
+    p = sub.add_parser("rodar", help="acorda os agentes enquanto houver recado aberto")
+    p.add_argument("--max-turnos", type=int, default=15)
+    p.add_argument("--modelo", default="sonnet")
+    p.add_argument("--sem-diario", action="store_true")
 
     args = parser.parse_args(argv)
     raiz = Path(args.cofre)
 
     if args.comando == "recado":
-        destino = mural.escrever_recado(raiz, args.de, args.para, args.assunto, args.texto, args.responde)
+        texto = args.texto if args.texto is not None else (raiz / args.texto_arquivo).read_text(encoding="utf-8-sig")
+        destino = mural.escrever_recado(raiz, args.de, args.para, args.assunto, texto, args.responde)
         print(destino.relative_to(raiz).as_posix())
         return 0
     if args.comando == "fechar":
-        mural.mudar_status(raiz / args.arquivo if not Path(args.arquivo).is_absolute() else args.arquivo, args.status)
-        print(f"{args.arquivo}: {args.status}")
+        try:
+            arquivo = mural.localizar(raiz, args.arquivo)
+            mural.mudar_status(arquivo, args.status)
+        except (FileNotFoundError, ValueError) as erro:
+            print(f"✗ {erro}")
+            return 1
+        print(f"{arquivo.relative_to(raiz).as_posix()}: {args.status}")
         return 0
+
+    if args.comando == "rodar":
+        from . import orquestrador
+
+        execucao = orquestrador.rodar(raiz, orquestrador.executor_claude(args.modelo), args.max_turnos,
+                                      diario=not args.sem_diario)
+        return 0 if execucao.parou_por == orquestrador.CICLO_COMPLETO else 1
 
     notas = cofre.ler_cofre(raiz)
     if args.comando == "mural":

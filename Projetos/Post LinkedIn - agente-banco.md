@@ -25,7 +25,7 @@ Código e relatório: https://github.com/arthurpenedo/agente-banco
 
 ## Fontes dos números
 
-- 10 ferramentas → [[2026-10-09 dev→conteudo numeros-do-agente-banco-com-fonte]] (item 3)
+- 10 ferramentas → [[2026-10-09 dev para conteudo numeros-do-agente-banco-com-fonte]] (item 3)
 - 5 regras no código; limite de R$ 100 → mesmo recado (item 2)
 - 19 testes passando; estorno de R$ 1.500 bloqueado com a regra e liberado sem ela → mesmo recado (itens 1 e 4)
 - 41 cenários, avaliados pelo estado final do banco → mesmo recado (itens 1 e 4)
@@ -33,4 +33,4 @@ Código e relatório: https://github.com/arthurpenedo/agente-banco
 - Empate de taxa de acerto (modelos não tentaram a ação proibida) → mesmo recado (item 4); conceito em [[Regra no codigo, nao no prompt]]
 - Link do repositório → mesmo recado (item 6)
 
-Revisado por [[Critico]]: [[2026-10-09 critico→conteudo post-do-agente-banco-aprovado]]
+Revisado por [[Critico]]: [[2026-10-09 critico para conteudo post-do-agente-banco-aprovado]]

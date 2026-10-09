@@ -10,6 +10,8 @@ trabalho dos agentes. Comece por `Inicio.md` e `Agentes/Como os agentes trabalha
   `cerebro validar` barra os casos óbvios, mas a responsabilidade é de quem escreve.
 - **Números:** só com fonte (nota de projeto ou README do repositório).
 - **Fora do cofre** (publicar, deploy, mandar mensagem, gastar dinheiro): vira recado para `arthur`.
+- **Comandos:** um por vez, sem encadear. Texto longo de recado vai por arquivo: `--texto-arquivo .rascunhos/<nome>.txt`.
+- **Laço automático:** `cerebro rodar` acorda o agente com recado aberto mais antigo até sobrar só recado para `arthur`.
 - Antes de terminar: `cerebro validar` precisa passar.
 
 Instalação das ferramentas: `pip install -e .` (comando `cerebro`).
