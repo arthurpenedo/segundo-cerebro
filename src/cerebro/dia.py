@@ -76,14 +76,14 @@ def dia_util(d: date) -> bool:
     return d.weekday() < 5 and d.strftime("%m-%d") not in FERIADOS
 
 
-def reorganizar(raiz: str | Path, inicio: date) -> list[tuple[str, date]]:
-    """Redistribui as publicações pendentes, na ordem atual, em dias úteis a partir de `inicio`."""
+def reorganizar(raiz: str | Path, inicio: date, so_dias_uteis: bool = False) -> list[tuple[str, date]]:
+    """Redistribui as publicações pendentes, na ordem atual, a partir de `inicio` (todo dia, ou só dias úteis)."""
     arquivo = Path(raiz) / CALENDARIO
     linhas = arquivo.read_text(encoding="utf-8").splitlines()
     pendentes = sorted((t for t in ler_tarefas(arquivo) if not t.feito and t.prazo), key=lambda t: t.prazo)
     nova_data, dia = {}, inicio
     for t in pendentes:
-        while not dia_util(dia):
+        while so_dias_uteis and not dia_util(dia):
             dia += timedelta(days=1)
         nova_data[t.linha] = dia
         dia += timedelta(days=1)
@@ -93,7 +93,7 @@ def reorganizar(raiz: str | Path, inicio: date) -> list[tuple[str, date]]:
     return [(re.search(r"\[\[(.+?)\]\]", linhas[n - 1]).group(1), d) for n, d in nova_data.items()]
 
 
-def agendar(raiz: str | Path, nome: str, hoje: date | None = None) -> date:
+def agendar(raiz: str | Path, nome: str, hoje: date | None = None, so_dias_uteis: bool = False) -> date:
     """Põe o projeto no próximo dia livre do calendário (um por dia). Devolve a data. Idempotente."""
     raiz, hoje = Path(raiz), hoje or date.today()
     arquivo = raiz / CALENDARIO
@@ -103,7 +103,7 @@ def agendar(raiz: str | Path, nome: str, hoje: date | None = None) -> date:
             return t.prazo
     ocupados = {t.prazo for t in entradas if t.prazo}
     dia = hoje
-    while dia in ocupados or not dia_util(dia):
+    while dia in ocupados or (so_dias_uteis and not dia_util(dia)):
         dia += timedelta(days=1)
     if not arquivo.exists():
         arquivo.write_text("# Calendário de publicação\n\nUm sistema por dia: repositório no GitHub + post no LinkedIn "

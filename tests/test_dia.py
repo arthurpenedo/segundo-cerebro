@@ -116,8 +116,8 @@ def test_projeto_pronto_aparece_para_revisar(tmp_path):
 def test_calendario_um_por_dia_e_aparece_no_hoje(tmp_path):
     raiz = _cofre(tmp_path)
     assert dia.agendar(raiz, "a", HOJE) == HOJE
-    assert dia.agendar(raiz, "b", HOJE) == date(2026, 10, 13)  # sexta → terça (fim de semana + feriado)
-    assert dia.agendar(raiz, "c", HOJE) == date(2026, 10, 14)
+    assert dia.agendar(raiz, "b", HOJE) == date(2026, 10, 10)  # padrão: todo dia
+    assert dia.agendar(raiz, "c", HOJE, so_dias_uteis=True) == date(2026, 10, 13)  # sexta → terça (fim de semana + feriado)
     assert dia.agendar(raiz, "a", HOJE) == HOJE  # já agendado: não duplica
     texto = dia.gerar_hoje(raiz, HOJE).read_text(encoding="utf-8")
     publicar = texto.split("Publicar hoje")[1].split("##")[0]
@@ -127,6 +127,6 @@ def test_calendario_um_por_dia_e_aparece_no_hoje(tmp_path):
 def test_so_dias_uteis_e_reorganizar(tmp_path):
     raiz = _cofre(tmp_path)
     assert dia.agendar(raiz, "a", HOJE) == HOJE  # sexta
-    assert dia.agendar(raiz, "b", HOJE) == date(2026, 10, 13)  # pula fim de semana e o feriado de 12/10
-    novo = dict(dia.reorganizar(raiz, date(2026, 10, 10)))
+    assert dia.agendar(raiz, "b", HOJE, so_dias_uteis=True) == date(2026, 10, 13)  # pula fim de semana e o feriado de 12/10
+    novo = dict(dia.reorganizar(raiz, date(2026, 10, 10), so_dias_uteis=True))
     assert novo == {"a": date(2026, 10, 13), "b": date(2026, 10, 14)}

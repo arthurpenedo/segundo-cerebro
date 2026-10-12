@@ -1,14 +1,72 @@
 {
-  "colorGroups": [
-    {"query": "path:Agentes", "color": {"a": 1, "rgb": 8150271}},
-    {"query": "path:Mural", "color": {"a": 1, "rgb": 15764526}},
-    {"query": "path:Projetos", "color": {"a": 1, "rgb": 3120750}},
-    {"query": "path:Carreira", "color": {"a": 1, "rgb": 5016021}},
-    {"query": "path:Conhecimento", "color": {"a": 1, "rgb": 13977724}},
-    {"query": "path:Diario", "color": {"a": 1, "rgb": 10132134}},
-    {"query": "path:00-Entrada", "color": {"a": 1, "rgb": 13214242}}
-  ],
+  "collapse-filter": true,
+  "search": "",
   "showTags": false,
   "showAttachments": false,
-  "showOrphans": true
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": true,
+  "colorGroups": [
+    {
+      "query": "path:Agentes",
+      "color": {
+        "a": 1,
+        "rgb": 8150271
+      }
+    },
+    {
+      "query": "path:Mural",
+      "color": {
+        "a": 1,
+        "rgb": 15764526
+      }
+    },
+    {
+      "query": "path:Projetos",
+      "color": {
+        "a": 1,
+        "rgb": 3120750
+      }
+    },
+    {
+      "query": "path:Carreira",
+      "color": {
+        "a": 1,
+        "rgb": 5016021
+      }
+    },
+    {
+      "query": "path:Conhecimento",
+      "color": {
+        "a": 1,
+        "rgb": 13977724
+      }
+    },
+    {
+      "query": "path:Diario",
+      "color": {
+        "a": 1,
+        "rgb": 10132134
+      }
+    },
+    {
+      "query": "path:00-Entrada",
+      "color": {
+        "a": 1,
+        "rgb": 13214242
+      }
+    }
+  ],
+  "collapse-display": true,
+  "showArrow": false,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": true,
+  "centerStrength": 0.518713248970312,
+  "repelStrength": 10,
+  "linkStrength": 1,
+  "linkDistance": 250,
+  "scale": 0.2642240880959182,
+  "close": true
 }
