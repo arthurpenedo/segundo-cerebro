@@ -27,7 +27,13 @@ NAVEGADORES = [r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
 def ler_post(arquivo: Path) -> dict:
     texto = arquivo.read_text(encoding="utf-8")
     m = re.match(r"---\r?\n(.*?)\r?\n---", texto, re.S)
-    return (yaml.safe_load(m.group(1)) or {}) if m else {}
+    if not m:
+        return {}
+    try:
+        return yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError:
+        # rascunho escrito à mão com aspas no meio do valor: lê "chave: valor" linha a linha
+        return {k.strip(): v.strip() for k, _, v in (l.partition(":") for l in m.group(1).splitlines()) if v}
 
 
 def _num(campo: str | None) -> tuple[str, str]:
@@ -53,15 +59,15 @@ def gerar_html(meta: dict) -> str:
 body{{width:1080px;height:1350px;background:radial-gradient(circle at 20% 0%,{c1} 0%,{c2} 70%);font-family:Inter,Segoe UI,sans-serif;
 color:#fff;padding:84px 72px;display:flex;flex-direction:column}}
 .tag{{align-self:flex-start;background:#ffffff1a;border:1px solid #ffffff33;border-radius:999px;padding:10px 22px;font-size:26px;font-weight:600}}
-h1{{font-size:74px;line-height:1.08;font-weight:800;margin-top:40px;letter-spacing:-1.5px}}
+h1{{font-size:86px;line-height:1.06;font-weight:800;margin-top:64px;letter-spacing:-1.5px}}
 h1 span{{color:{destaque}}}
-.ex{{margin-top:48px;background:#fff;color:#1d1d22;border-radius:26px;padding:34px 38px;font-size:31px;line-height:1.45;
+.ex{{margin-top:72px;background:#fff;color:#1d1d22;border-radius:26px;padding:42px 44px;font-size:37px;line-height:1.45;
 box-shadow:0 30px 80px #0008}}
 .ex .seta{{color:{c1};font-size:34px}}
-.nums{{display:flex;gap:22px;margin-top:40px}}
-.n{{flex:1;background:#ffffff12;border:1px solid #ffffff26;border-radius:20px;padding:24px 26px}}
-.n b{{display:block;font-size:60px;font-weight:800;color:{destaque};letter-spacing:-1px}}
-.n span{{font-size:23px;color:#d6dbf5;line-height:1.35}}
+.nums{{display:flex;gap:24px;margin-top:64px}}
+.n{{flex:1;background:#ffffff12;border:1px solid #ffffff26;border-radius:22px;padding:30px 30px}}
+.n b{{display:block;font-size:76px;font-weight:800;color:{destaque};letter-spacing:-1px}}
+.n span{{font-size:27px;color:#d6dbf5;line-height:1.35}}
 .rodape{{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;font-size:26px;color:#d6dbf5}}
 .rodape b{{color:#fff;font-size:30px}}
 </style></head><body>
