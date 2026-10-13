@@ -34,6 +34,6 @@ def aprendi(raiz: str | Path, texto: str, tema: str | None = None, quando: datet
             manual.write_text(f"---\ntipo: manual\n---\n# {tema}\n\nPasso a passo que cresce com cada aprendizado. "
                               f"Ler antes de repetir a tarefa.\n\n## Aprendizados\n", encoding="utf-8")
         with manual.open("a", encoding="utf-8") as f:
-            f.write(f"- {texto} ([[{quando:%Y-%m-%d}]])\n")
+            f.write(f"- {texto} ([[Aprendizados {quando:%Y-%m-%d}]])\n")
         escritos.append(manual)
     return escritos
