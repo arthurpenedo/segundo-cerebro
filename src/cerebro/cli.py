@@ -43,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validar", help="checa o cofre (usado no CI)")
     sub.add_parser("caixa", help="junta os recados para o Arthur por pedido e atualiza a nota da caixa")
     sub.add_parser("hoje", help="gera a nota Hoje a partir das tarefas e da fila do Claude")
+    p = sub.add_parser("aprendi", help="registra um aprendizado no cofre (diário + manual do tema)")
+    p.add_argument("texto")
+    p.add_argument("--tema")
     p = sub.add_parser("arte", help="gera a imagem vertical do post a partir do rascunho")
     p.add_argument("post")
     p = sub.add_parser("agendar", help="põe um projeto no próximo dia livre do calendário de publicação")
@@ -87,6 +90,12 @@ def main(argv: list[str] | None = None) -> int:
                                       diario=not args.sem_diario)
         return 0 if execucao.parou_por == orquestrador.CICLO_COMPLETO else 1
 
+    if args.comando == "aprendi":
+        from .aprendizado import aprendi
+
+        for p in aprendi(raiz, args.texto, args.tema):
+            print(p.relative_to(raiz).as_posix())
+        return 0
     if args.comando == "arte":
         from .arte import gerar_arte
 
