@@ -18,7 +18,7 @@ def aprendi(raiz: str | Path, texto: str, tema: str | None = None, quando: datet
     texto = " ".join(texto.split())
     escritos = []
 
-    dia = raiz / "Aprendizados" / f"{quando:%Y-%m-%d}.md"
+    dia = raiz / "Aprendizados" / f"Aprendizados {quando:%Y-%m-%d}.md"
     dia.parent.mkdir(parents=True, exist_ok=True)
     if not dia.exists():
         dia.write_text(f"---\ntipo: aprendizados\ndata: {quando:%Y-%m-%d}\n---\n# Aprendizados de {quando:%d/%m/%Y}\n\n",
