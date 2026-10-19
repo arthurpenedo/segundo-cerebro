@@ -24,6 +24,10 @@ FILA = "Para o Claude.md"
 HOJE = "Hoje.md"
 MELHORIAS = "Melhorias.md"
 MSG_COMMIT = ".rotina-msg"
+MERCADO = "Vagas/Mercado.md"
+PARA_APLICAR = "Vagas/Para aplicar.md"
+CURRICULO = "Curriculos/Para o curriculo.md"
+RADAR = "https://arthurpenedo.github.io/radar-skills-br/"
 
 _ITEM = re.compile(r"^\s*- \[(?P<feito>[ xX])\] (?P<texto>.+?)\s*$")
 _DATA = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")
@@ -175,6 +179,16 @@ def instrucao_rotina(hoje: date, projetos: Path | None = None) -> str:
         f"Nada de mudança vazia ou só cosmética para ter commit. Marque o item `[x]` com `✅ {hoje.isoformat()}`. "
         f"Se a lista estiver acabando, acrescente melhorias úteis que você notou (teste faltando, README confuso, demo sem página).\n"
     ) if projetos else ""
+    mercado = (
+        f"2c. Mercado de trabalho (o objetivo maior é o Arthur conseguir emprego): leia `{MERCADO}`. Todo dia, baixe "
+        f"{RADAR}vagas.json (coleta diária do radar-skills-br) e acrescente em `{PARA_APLICAR}` as vagas NOVAS que combinam "
+        f"com `Sobre mim.md` (nível estágio/júnior/trainee ou não informado, SP ou remoto, IA/dados/automação/dev), com link e "
+        f"por que combina; nunca repita uma vaga que já está lá. Se o campo `atualizado:` de `{MERCADO}` tiver mais de 7 dias, "
+        f"refaça o estudo com {RADAR}resumo.json e pesquisa na web (fontes com link): habilidades por nível, onde estão as vagas, "
+        f"programas de trainee com prazo, o que falta no portfólio. Se surgir uma lacuna nova, acrescente um item 'Construir' em "
+        f"`{FILA}` para um sistema gratuito que a feche. Quando um sistema ficar pronto, escreva em `{CURRICULO}` a linha pronta "
+        f"para o currículo (o que fez, tecnologias, número medido, link), sem inventar nada.\n"
+    )
     return (
         f"Você é o assistente pessoal do Arthur e está rodando SOZINHO (rotina automática de {_data_br(hoje)}, "
         f"{hoje.isoformat()}); ele não está disponível para responder. Neste cofre:\n"
@@ -185,6 +199,7 @@ def instrucao_rotina(hoje: date, projetos: Path | None = None) -> str:
         f"pagar, logar, senha, CPF, git push), NÃO faça: prepare o que der e crie uma tarefa para ele em `{TAREFAS}` com a data de hoje. "
         f"{criar}\n"
         f"{manutencao}"
+        f"{mercado}"
         f"3. Olhe `{TAREFAS}` e `Vagas/`: se houver algo que você possa adiantar na próxima rotina (pesquisa, rascunho, "
         f"organização), escreva a instrução em `{FILA}` (é assim que você deixa instruções para si mesmo).\n"
         f"4. Rode `cerebro hoje` no fim. Não use git neste cofre. Responda em até 5 linhas o que fez e o que ficou para o Arthur."

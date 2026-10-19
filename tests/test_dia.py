@@ -199,3 +199,9 @@ def test_instrucao_pede_melhorias_reais_com_mensagem():
 
     texto = dia.instrucao_rotina(HOJE, Path("C:/projetos"))
     assert dia.MELHORIAS in texto and dia.MSG_COMMIT in texto and "REAIS" in texto
+
+
+def test_instrucao_inclui_estudo_do_mercado_e_curriculo():
+    texto = dia.instrucao_rotina(HOJE)
+    assert dia.MERCADO in texto and dia.PARA_APLICAR in texto and dia.CURRICULO in texto
+    assert "radar-skills-br" in texto and "sem inventar" in texto
