@@ -28,6 +28,8 @@ MERCADO = "Vagas/Mercado.md"
 PARA_APLICAR = "Vagas/Para aplicar.md"
 CURRICULO = "Curriculos/Para o curriculo.md"
 RADAR = "https://arthurpenedo.github.io/radar-skills-br/"
+TRILHA = "Estudos/Trilha.md"
+COMO_ESTUDAR = "Estudos/Como estudar.md"
 
 _ITEM = re.compile(r"^\s*- \[(?P<feito>[ xX])\] (?P<texto>.+?)\s*$")
 _DATA = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")
@@ -188,6 +190,11 @@ def instrucao_rotina(hoje: date, projetos: Path | None = None) -> str:
         f"programas de trainee com prazo, o que falta no portfólio. Se surgir uma lacuna nova, acrescente um item 'Construir' em "
         f"`{FILA}` para um sistema gratuito que a feche. Quando um sistema ficar pronto, escreva em `{CURRICULO}` a linha pronta "
         f"para o currículo (o que fez, tecnologias, número medido, link), sem inventar nada.\n"
+        f"2d. Estudo do Arthur: escreva UMA aula por dia, a próxima de `{TRILHA}` que ainda não tem nota, seguindo o molde de "
+        f"`{COMO_ESTUDAR}` e usando o código real dos projetos dele como exemplo (arquivo, função, número medido do README). "
+        f"Linguagem simples, para quem vai explicar numa entrevista. Salve em `Estudos/<NN> <conceito>.md` e marque na trilha que "
+        f"a aula está pronta (sem marcar `[x]`: quem marca é o Arthur, quando estudar). Quando um sistema novo for para o currículo, "
+        f"acrescente na trilha os conceitos dele que ainda não estão lá.\n"
     )
     return (
         f"Você é o assistente pessoal do Arthur e está rodando SOZINHO (rotina automática de {_data_br(hoje)}, "

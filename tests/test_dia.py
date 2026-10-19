@@ -205,3 +205,8 @@ def test_instrucao_inclui_estudo_do_mercado_e_curriculo():
     texto = dia.instrucao_rotina(HOJE)
     assert dia.MERCADO in texto and dia.PARA_APLICAR in texto and dia.CURRICULO in texto
     assert "radar-skills-br" in texto and "sem inventar" in texto
+
+
+def test_instrucao_inclui_uma_aula_por_dia():
+    texto = dia.instrucao_rotina(HOJE)
+    assert dia.TRILHA in texto and dia.COMO_ESTUDAR in texto and "UMA aula por dia" in texto
