@@ -22,6 +22,8 @@ from pathlib import Path
 TAREFAS = "Tarefas.md"
 FILA = "Para o Claude.md"
 HOJE = "Hoje.md"
+MELHORIAS = "Melhorias.md"
+MSG_COMMIT = ".rotina-msg"
 
 _ITEM = re.compile(r"^\s*- \[(?P<feito>[ xX])\] (?P<texto>.+?)\s*$")
 _DATA = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")
@@ -31,8 +33,9 @@ _DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 # O que a rotina pode fazer sozinha. Mandar, publicar, pagar, candidatar e logar NUNCA estão aqui.
 FERRAMENTAS_ROTINA = ["Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch",
                       "Bash(cerebro:*)", "PowerShell(cerebro:*)"]
-# Com uma pasta de projetos, a rotina também constrói: roda Python e testes e faz commit LOCAL.
-# `git push` e `gh` ficam de fora de propósito: publicar é sempre decisão do dono.
+# Com uma pasta de projetos, a rotina também constrói: roda Python e testes.
+# O agente nunca recebe `git push` nem `gh`: quem commita e (com --publicar) publica é o motor, depois de
+# conferir testes e segredos (ver `publicar_projetos`).
 _CRIAR = ["python", "pytest", "pip install -e", "git init", "git add", "git commit", "git status", "git log", "git diff"]
 FERRAMENTAS_CRIACAO = [f"{shell}({c}:*)" for shell in ("Bash", "PowerShell") for c in _CRIAR]
 
@@ -162,9 +165,16 @@ def gerar_hoje(raiz: str | Path, hoje: date | None = None) -> Path:
 
 
 def instrucao_rotina(hoje: date, projetos: Path | None = None) -> str:
-    criar = (f"Para itens de criação, siga `Como criar.md`: código em `{projetos}`, testes rodando. Você NÃO usa git e NÃO cria tarefa de git: o motor faz o commit depois "
-             f"da rotina e o Claude publica no GitHub quando o Arthur está em sessão. " if projetos else
+    criar = (f"Para itens de criação, siga `Como criar.md`: código em `{projetos}`, testes rodando. Você NÃO usa git e NÃO cria tarefa de git: o motor faz o commit "
+             f"(e o push, quando liberado) depois da rotina. Repositório NOVO no GitHub só o Claude cria, em sessão com o Arthur. " if projetos else
              "Nesta rotina não há pasta de projetos liberada: itens de criação viram plano/rascunho no cofre. ")
+    manutencao = (
+        f"2b. Manutenção do GitHub: faça de 2 a 4 melhorias REAIS e pequenas, cada uma num projeto diferente de `{projetos}`, "
+        f"pegando os itens não marcados de `{MELHORIAS}` de cima para baixo. Rode os testes do projeto depois de mexer. "
+        f"Em cada projeto alterado, escreva em `<projeto>/{MSG_COMMIT}` a mensagem do commit: uma linha em português dizendo o que mudou. "
+        f"Nada de mudança vazia ou só cosmética para ter commit. Marque o item `[x]` com `✅ {hoje.isoformat()}`. "
+        f"Se a lista estiver acabando, acrescente melhorias úteis que você notou (teste faltando, README confuso, demo sem página).\n"
+    ) if projetos else ""
     return (
         f"Você é o assistente pessoal do Arthur e está rodando SOZINHO (rotina automática de {_data_br(hoje)}, "
         f"{hoje.isoformat()}); ele não está disponível para responder. Neste cofre:\n"
@@ -174,6 +184,7 @@ def instrucao_rotina(hoje: date, projetos: Path | None = None) -> str:
         f"com `status: revisar` no topo. Se um item exigir algo proibido pelas Regras (mandar, publicar, candidatar, "
         f"pagar, logar, senha, CPF, git push), NÃO faça: prepare o que der e crie uma tarefa para ele em `{TAREFAS}` com a data de hoje. "
         f"{criar}\n"
+        f"{manutencao}"
         f"3. Olhe `{TAREFAS}` e `Vagas/`: se houver algo que você possa adiantar na próxima rotina (pesquisa, rascunho, "
         f"organização), escreva a instrução em `{FILA}` (é assim que você deixa instruções para si mesmo).\n"
         f"4. Rode `cerebro hoje` no fim. Não use git neste cofre. Responda em até 5 linhas o que fez e o que ficou para o Arthur."
@@ -203,8 +214,62 @@ def commitar_projetos(raiz: Path, projetos: Path, hoje: date) -> list[str]:
     return feitos
 
 
+_SEGREDO = re.compile(r"sk_live_\w{10,}|sk-ant-[\w-]{20,}|ghp_\w{20,}|github_pat_\w{20,}|AKIA[0-9A-Z]{16}|"
+                      r"whsec_\w{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----")
+REMOTO_DONO = r"github\.com[:/]arthurpenedo/"
+
+
+def _testes_passam(pasta: Path) -> bool:
+    """Roda a suíte do projeto (pytest ou npm test). Sem suíte conhecida, não publica."""
+    if (pasta / "pyproject.toml").exists():
+        cmd = ["python", "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"]
+    elif (pasta / "package.json").exists():
+        cmd = "npm test --silent"
+    else:
+        return False
+    try:
+        r = subprocess.run(cmd, cwd=pasta, capture_output=True, text=True, encoding="utf-8", timeout=900,
+                           shell=isinstance(cmd, str))
+    except subprocess.TimeoutExpired:
+        return False
+    return r.returncode == 0
+
+
+def publicar_projetos(projetos: Path, hoje: date, ignorar=frozenset(), remoto: str = REMOTO_DONO,
+                      testes=_testes_passam) -> list[str]:
+    """Commit + push de cada projeto que a rotina alterou. Só publica se o remoto é do Arthur, os testes passam e o
+    diff não tem cara de segredo. O que falha fica só local (ou nem é commitado) e aparece no relatório."""
+    relatorio = []
+    for pasta in sorted(p for p in Path(projetos).iterdir() if (p / ".git").exists() and p.name not in ignorar):
+        def git(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(["git", "-C", str(pasta), *args], capture_output=True, text=True, encoding="utf-8")
+
+        arquivo_msg = pasta / MSG_COMMIT
+        linhas = arquivo_msg.read_text(encoding="utf-8").strip().splitlines() if arquivo_msg.exists() else []
+        msg = linhas[0].strip() if linhas else f"Rotina {hoje.isoformat()}: melhorias"
+        arquivo_msg.unlink(missing_ok=True)
+        git("add", "-A")
+        if git("diff", "--cached", "--quiet").returncode == 0:
+            continue
+        if _SEGREDO.search(git("diff", "--cached").stdout or ""):
+            git("reset", "-q")
+            relatorio.append(f"{pasta.name}: NÃO commitado, o diff parece ter uma chave ou segredo")
+            continue
+        git("commit", "-q", "-m", msg)
+        if not re.search(remoto, git("remote", "get-url", "origin").stdout or ""):
+            relatorio.append(f"{pasta.name}: commit só local (o remoto não é do Arthur)")
+        elif not testes(pasta):
+            relatorio.append(f"{pasta.name}: commit só local, sem push (testes falharam)")
+        elif git("push", "-q").returncode != 0:
+            relatorio.append(f"{pasta.name}: commit só local, o push falhou")
+        else:
+            relatorio.append(f"{pasta.name}: publicado · {msg}")
+    return relatorio
+
+
 def rodar_rotina(raiz: str | Path, executor=None, hoje: date | None = None, modelo: str = "sonnet",
-                 timeout: int = 3600, projetos: str | Path | None = None) -> str:
+                 timeout: int = 3600, projetos: str | Path | None = None, publicar: bool = False,
+                 ignorar=frozenset()) -> str:
     """Roda a rotina (com o Claude Code, ou com um executor de teste), regenera Hoje.md e registra no Diário."""
     raiz, hoje = Path(raiz), hoje or date.today()
     projetos = Path(projetos) if projetos else None
@@ -221,7 +286,11 @@ def rodar_rotina(raiz: str | Path, executor=None, hoje: date | None = None, mode
         saida = (r.stdout or r.stderr).strip()
     else:
         saida = executor(texto, raiz)
-    if projetos:
+    if projetos and publicar:
+        relatorio = publicar_projetos(projetos, hoje, ignorar)
+        if relatorio:
+            saida += "\n\nGitHub (feito pelo motor):\n" + "\n".join(f"- {r}" for r in relatorio)
+    elif projetos:
         commits = commitar_projetos(raiz, projetos, hoje)
         if commits:
             saida += "\n\nCommit local feito pelo motor (sem push): " + ", ".join(commits)

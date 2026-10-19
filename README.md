@@ -115,14 +115,16 @@ código e a ideia; tarefas, vagas e rascunhos reais ficam no PC do dono.
 - `Tarefas.md` usa o formato do plugin Tasks do Obsidian: `- [ ] Pagar a conta 📅 2026-10-10`.
 - `Para o Claude.md` é a **fila de instruções para quando o dono não está**. Ele escreve ali, e o próprio
   assistente também, quando vê algo que dá para adiantar na próxima rodada.
-- `cerebro rotina` roda sozinha nos dias úteis às 8h (Agendador de Tarefas do Windows): o Claude Code faz os
+- `cerebro rotina` roda sozinha todo dia às 8h (Agendador de Tarefas do Windows): o Claude Code faz os
   itens da fila, marca `[x]` com o link do resultado e regenera `Hoje.md` (atrasado, hoje, próximos 7 dias, o
   que está pronto para revisar, o que ele fez).
 - **Foco em criação:** o uso principal é criar projetos para o GitHub. A fila recebe instruções como "propor 5
   ideias" ou "construir X"; com `--projetos <pasta>`, a rotina escreve o código, roda os testes e faz **commit
   local**. A nota do projeto vira `pronto para revisar` e aparece em `Hoje.md`.
-- **Limites:** a rotina não recebe `git push`, `gh`, mensagens, publicação, pagamento nem login. Publicar é sempre
-  decisão do dono. Limite honesto: como ela pode rodar `python` para testar, a trava é a lista de ferramentas mais
+- **Manutenção diária com `--publicar`:** a rotina faz de 2 a 4 melhorias reais (de uma lista em `Melhorias.md`) e
+  escreve a mensagem de cada commit. Quem faz o push é o **motor em Python, não o agente**, e só quando o remoto é do
+  dono, os testes do projeto passam e o diff não tem cara de chave. O que falha fica só local e vai para o Diário.
+- **Limites:** o agente não recebe `git push`, `gh`, mensagens, publicação, pagamento nem login. Limite honesto: como ela pode rodar `python` para testar, a trava é a lista de ferramentas mais
   as regras escritas, e não um sandbox. Para isolamento de verdade seria preciso um contêiner.
 
 Na primeira rodada real, a rotina fez 2 de 3 instruções. Ela percebeu sozinha que a segunda-feira era feriado ao

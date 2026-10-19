@@ -130,3 +130,72 @@ def test_so_dias_uteis_e_reorganizar(tmp_path):
     assert dia.agendar(raiz, "b", HOJE, so_dias_uteis=True) == date(2026, 10, 13)  # pula fim de semana e o feriado de 12/10
     novo = dict(dia.reorganizar(raiz, date(2026, 10, 10), so_dias_uteis=True))
     assert novo == {"a": date(2026, 10, 13), "b": date(2026, 10, 14)}
+
+
+def _repo_com_origem(tmp_path, nome):
+    import subprocess
+
+    origem = tmp_path / "remotos" / f"{nome}.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origem)], check=True)
+    pasta = tmp_path / "projetos" / nome
+    pasta.mkdir(parents=True)
+
+    def git(*a):
+        return subprocess.run(["git", "-C", str(pasta), *a], capture_output=True, text=True, check=True).stdout
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    git("remote", "add", "origin", str(origem))
+    (pasta / "a.txt").write_text("1", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "inicio")
+    git("push", "-q", "-u", "origin", "main")
+    return pasta, git
+
+
+def test_publicar_faz_push_com_a_mensagem_do_agente(tmp_path):
+    pasta, git = _repo_com_origem(tmp_path, "proj")
+    (pasta / "a.txt").write_text("2", encoding="utf-8")
+    (pasta / dia.MSG_COMMIT).write_text("Adiciona teste do parser\n", encoding="utf-8")
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True)
+    assert rel == ["proj: publicado · Adiciona teste do parser"]
+    assert not (pasta / dia.MSG_COMMIT).exists()
+    assert git("status", "-sb").splitlines()[0] == "## main...origin/main"  # nada pendente de push
+    assert "Adiciona teste do parser" in git("log", "-1", "--format=%s")
+
+
+def test_publicar_sem_mudanca_nao_commita(tmp_path):
+    _repo_com_origem(tmp_path, "proj")
+    assert dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True) == []
+
+
+def test_publicar_barra_teste_falhando_remoto_alheio_e_segredo(tmp_path):
+    pasta, git = _repo_com_origem(tmp_path, "falha")
+    (pasta / "a.txt").write_text("2", encoding="utf-8")
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: False)
+    assert rel == ["falha: commit só local, sem push (testes falharam)"]
+    assert "ahead 1" in git("status", "-sb")
+
+    (pasta / "a.txt").write_text("3", encoding="utf-8")
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, testes=lambda p: True)  # remoto padrão: github arthurpenedo
+    assert rel == ["falha: commit só local (o remoto não é do Arthur)"]
+
+    (pasta / "chave.txt").write_text("sk-ant-" + "x" * 30, encoding="utf-8")
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True)
+    assert rel == ["falha: NÃO commitado, o diff parece ter uma chave ou segredo"]
+    assert "chave.txt" in git("status", "--porcelain")
+
+
+def test_publicar_respeita_ignorar(tmp_path):
+    pasta, _ = _repo_com_origem(tmp_path, "site")
+    (pasta / "a.txt").write_text("2", encoding="utf-8")
+    assert dia.publicar_projetos(tmp_path / "projetos", HOJE, ignorar={"site"}, remoto="remotos",
+                                 testes=lambda p: True) == []
+
+
+def test_instrucao_pede_melhorias_reais_com_mensagem():
+    from pathlib import Path
+
+    texto = dia.instrucao_rotina(HOJE, Path("C:/projetos"))
+    assert dia.MELHORIAS in texto and dia.MSG_COMMIT in texto and "REAIS" in texto
