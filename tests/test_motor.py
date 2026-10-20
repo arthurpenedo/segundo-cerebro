@@ -330,3 +330,17 @@ def test_busca_entende_plural():
     from cerebro.busca import termos
 
     assert termos("notas posts ações") == termos("nota post ação")
+
+
+def test_responder_resolve_e_responde_e_deduzido(cofre):
+    nome = _recado(cofre, "maestro", "dev", "Status do CI")
+    ok, saida = Bancada(cofre, "dev").executar("deixar_recado", {"para": "maestro", "assunto": "CI verde", "texto": "verde"})
+    assert ok and "resolvido" in saida
+    notas = ler_cofre(cofre)
+    assert notas[nome.lower()].meta["status"] == "feito"
+    resposta = next(r for r in mural.recados(notas) if r.meta["de"] == "dev")
+    assert resposta.meta["responde"] == nome  # deduzido: era o único recado aberto do maestro para o dev
+    # recado para outro agente (não quem pediu) não fecha nada
+    outro = _recado(cofre, "maestro", "dev", "Outro pedido")
+    ok, saida = Bancada(cofre, "dev").executar("deixar_recado", {"para": "critico", "assunto": "revisa", "texto": "x"})
+    assert ok and "resolvido" not in saida and ler_cofre(cofre)[outro.lower()].meta["status"] == "aberto"

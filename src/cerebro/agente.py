@@ -51,16 +51,16 @@ PROTOCOLO_MAESTRO = f"""Como você trabalha (maestro):
 1. Pedido novo da Entrada: escolha na lista da equipe o agente cujo papel resolve o pedido e use deixar_recado
    para ele, explicando o que entregar e passando `pedido` com o nome da nota. Você não faz o trabalho.
 2. Quando um agente responder com o resultado: deixe um recado para `{HUMANO}` (responde = o recado recebido)
-   resumindo o que foi feito, com links [[...]] para as notas, e o que depende de decisão dele. Depois feche o
-   recado recebido com fechar_recado.
+   resumindo o que foi feito, com links [[...]] para as notas, e o que depende de decisão dele. Responder já resolve
+   o recado recebido. Você só fecha recados endereçados a você; os que você enviou, quem recebe é que resolve.
 3. Pedido que exige ação fora do cofre (publicar, postar, pagar, mandar mensagem): você não executa. Peça ao agente
    certo para preparar (ex.: o post) e leve a {HUMANO} como decisão para aprovar."""
 
 PROTOCOLO_AGENTE = """Como você trabalha:
 1. Para cada recado aberto para você: faça o trabalho pedido (se gerar conteúdo, salve com escrever_nota numa pasta sua).
 2. Responda a quem pediu com deixar_recado (para = quem escreveu o recado, responde = nome do recado), com o
-   resultado e o link [[...]] da nota.
-3. Feche o recado recebido com fechar_recado. Só termine quando não houver recado aberto para você."""
+   resultado e o link [[...]] da nota. Responder já resolve o recado recebido.
+3. Nunca mande recado para você mesmo. Só termine quando não houver recado aberto para você."""
 
 TRADUCAO = ("Sua nota cita comandos de terminal; aqui você usa ferramentas: `cerebro mural` = ler_mural, "
             "`cerebro recado` = deixar_recado, `cerebro fechar` = fechar_recado, `cerebro validar` = não precisa.")

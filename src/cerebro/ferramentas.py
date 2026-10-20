@@ -106,15 +106,30 @@ class Bancada:
                     dica = f" Você está respondendo a um recado de '{original.meta.get('de')}': mande para ele."
             raise Recusa("você não pode deixar recado para você mesmo." + dica)
         self._checar_sensivel(texto + " " + assunto)
+        notas = ler_cofre(self.raiz)
+        meus = mural.abertos_para(notas, self.agente)
         if responde:
             responde = Path(responde.strip("[] ")).stem
-            if resolver(ler_cofre(self.raiz), responde) is None:
-                raise Recusa(f"o recado '{responde}' não existe; use o nome exato que aparece em ler_mural")
+            if resolver(notas, responde) is None:
+                try:  # aceita um trecho único do nome, como o `cerebro fechar`
+                    responde = mural.localizar(self.raiz, responde).stem
+                except (FileNotFoundError, ValueError):
+                    raise Recusa(f"o recado '{responde}' não existe; use o nome exato que aparece em ler_mural") from None
+        else:
+            # Esqueceu de dizer a qual recado responde: se só há um recado aberto deste destinatário para mim, é ele.
+            do_destinatario = [r for r in meus if str(r.meta.get("de", "")).lower() == para]
+            if len(do_destinatario) == 1:
+                responde = do_destinatario[0].nome
         try:
             arquivo = mural.escrever_recado(self.raiz, self.agente, para, assunto, texto, responde=responde,
                                             pedido=pedido or (None if responde else self.pedido_padrao))
         except mural.RecadoRecusado as e:
             raise Recusa(str(e)) from e
+        # Responder resolve: o recado que eu recebi e acabei de responder sai da minha fila.
+        resolvido = next((r for r in meus if responde and r.nome.lower() == responde.lower()), None)
+        if resolvido is not None:
+            mural.mudar_status(self.raiz / resolvido.caminho, "feito")
+            return f"Recado criado: {arquivo.stem}. O recado que você respondeu ({resolvido.nome}) foi marcado como resolvido."
         return f"Recado criado: {arquivo.stem}"
 
     def fechar_recado(self, nome: str, status: str = "feito") -> str:
