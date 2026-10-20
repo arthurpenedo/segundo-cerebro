@@ -50,6 +50,7 @@ class ResultadoCenario:
     parou_por: str
     entrega: str = ""
     problemas: list[str] = field(default_factory=list)
+    trilha: list[str] = field(default_factory=list)
 
     @property
     def aprovado(self) -> bool:
@@ -98,7 +99,8 @@ def rodar_cenario(cenario: dict, llm: LLM, max_turnos: int = 14, pasta: Path | N
         cofre_integro=not problemas, checagens_ok=ok, checagens_total=len(checagens), turnos=len(execucao.turnos),
         agentes=[t.agente for t in execucao.turnos], recusas=sum(t.recusas for t in execucao.turnos),
         tokens=sum(t.tokens for t in execucao.turnos), segundos=round(segundos, 1), parou_por=execucao.parou_por,
-        entrega=entrega[:1500], problemas=problemas[:10])
+        entrega=entrega[:1500], problemas=problemas[:10],
+        trilha=[f"{t.agente}: " + "; ".join(t.detalhes) + (f" → {t.saida[:120]}" if t.saida else "") for t in execucao.turnos])
 
 
 def avaliar(llm: LLM, cenarios: list[dict] | None = None, max_turnos: int = 14, aviso=print) -> dict:

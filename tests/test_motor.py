@@ -285,3 +285,19 @@ def test_painel_mostra_a_avaliacao(cofre):
                          "agentes": ["maestro", "pesquisador"], "recusas": 1, "parou_por": "fim"}]}
     html_ = painel.gerar(ler_cofre(cofre), avaliacoes=[rel])
     assert "qwen2.5:3b" in html_ and "1/2" in html_ and "nota-de-conceito" in html_ and "maestro → pesquisador" in html_
+
+
+def test_instrucao_tem_a_equipe_e_o_protocolo(cofre):
+    from cerebro.agente import instrucao_de_sistema
+
+    m = instrucao_de_sistema(cofre, "maestro")
+    assert "- pesquisador:" in m and "- dev:" in m and "Pedido novo da Entrada" in m
+    assert "Responda a quem pediu" in instrucao_de_sistema(cofre, "dev")
+
+
+def test_motor_lembra_quem_para_com_recado_aberto(cofre):
+    nome = _recado(cofre, "maestro", "dev", "Status")
+    llm = RoteiroLLM([Resposta("feito"), chamar("fechar_recado", nome=nome), Resposta("agora sim")])
+    r = rodar_turno(cofre, "dev", "teste", llm)
+    assert r.lembretes == 1 and r.resposta == "agora sim"
+    assert "Ainda estão abertos" in llm.recebido[1][-1]["content"]

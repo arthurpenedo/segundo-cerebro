@@ -18,7 +18,7 @@ from pathlib import Path
 from .cofre import ler_cofre
 from .ferramentas import Bancada, Registro, esquema_openai
 from .llm import LLM
-from .mural import HUMANO, agentes
+from .mural import HUMANO, abertos_para, agentes
 
 REGRAS = f"""Você é um agente de um segundo cérebro (um cofre de notas do Obsidian). Você trabalha usando ferramentas.
 Regras do cofre (aplicadas pelo sistema; se uma ferramenta recusar, leia o motivo e corrija):
@@ -40,24 +40,55 @@ class ResultadoTurno:
     tokens_saida: int = 0
     segundos: float = 0.0
     parou_no_limite: bool = False
+    lembretes: int = 0
 
     @property
     def recusas(self) -> int:
         return sum(not r.ok for r in self.registros)
 
 
+PROTOCOLO_MAESTRO = f"""Como você trabalha (maestro):
+1. Pedido novo da Entrada: escolha na lista da equipe o agente cujo papel resolve o pedido e use deixar_recado
+   para ele, explicando o que entregar e passando `pedido` com o nome da nota. Você não faz o trabalho.
+2. Quando um agente responder com o resultado: deixe um recado para `{HUMANO}` (responde = o recado recebido)
+   resumindo o que foi feito, com links [[...]] para as notas, e o que depende de decisão dele. Depois feche o
+   recado recebido com fechar_recado.
+3. Pedido que exige ação fora do cofre (publicar, postar, pagar, mandar mensagem): você não executa. Peça ao agente
+   certo para preparar (ex.: o post) e leve a {HUMANO} como decisão para aprovar."""
+
+PROTOCOLO_AGENTE = """Como você trabalha:
+1. Para cada recado aberto para você: faça o trabalho pedido (se gerar conteúdo, salve com escrever_nota numa pasta sua).
+2. Responda a quem pediu com deixar_recado (para = quem escreveu o recado, responde = nome do recado), com o
+   resultado e o link [[...]] da nota.
+3. Feche o recado recebido com fechar_recado. Só termine quando não houver recado aberto para você."""
+
+TRADUCAO = ("Sua nota cita comandos de terminal; aqui você usa ferramentas: `cerebro mural` = ler_mural, "
+            "`cerebro recado` = deixar_recado, `cerebro fechar` = fechar_recado, `cerebro validar` = não precisa.")
+
+
 def instrucao_de_sistema(raiz: Path, agente: str) -> str:
-    ficha = agentes(ler_cofre(raiz)).get(agente)
+    equipe = agentes(ler_cofre(raiz))
+    ficha = equipe.get(agente)
     if ficha is None:
         raise ValueError(f"'{agente}' não é um agente do cofre")
     pastas = ", ".join(str(p) for p in ficha.meta.get("escreve_em") or [])
-    return (f"{REGRAS}\n\nVocê é o agente `{agente}` ({ficha.meta.get('nome', agente)}). Pode escrever em: {pastas}.\n"
+    lista = "\n".join(f"- {i}: {a.meta.get('papel', '')}" for i, a in sorted(equipe.items()))
+    protocolo = PROTOCOLO_MAESTRO if agente == "maestro" else PROTOCOLO_AGENTE
+    return (f"{REGRAS}\n\nVocê é o agente `{agente}` ({ficha.meta.get('nome', agente)}). Pode escrever em: {pastas}.\n\n"
+            f"Equipe (id: papel):\n{lista}\n\n{protocolo}\n\n{TRADUCAO}\n\n"
             f"Sua nota no cofre (papel e regras):\n\n{ficha.corpo.strip()}")
 
 
-def rodar_turno(raiz: str | Path, agente: str, motivo: str, llm: LLM, max_passos: int = 12) -> ResultadoTurno:
+def _abertos_meus(raiz: Path, agente: str) -> set[str]:
+    return {r.nome for r in abertos_para(ler_cofre(raiz), agente)}
+
+
+def rodar_turno(raiz: str | Path, agente: str, motivo: str, llm: LLM, max_passos: int = 12,
+                lembretes: int = 1) -> ResultadoTurno:
+    """Roda o turno. Se o modelo parar com recados ainda abertos, o motor lembra `lembretes` vez(es)."""
     raiz, agente = Path(raiz), agente.lower()
     bancada = Bancada(raiz, agente)
+    no_inicio = _abertos_meus(raiz, agente)
     mensagens = [
         {"role": "system", "content": instrucao_de_sistema(raiz, agente)},
         {"role": "user", "content": f"Você foi acordado: {motivo}.\n\nRecados abertos para você agora:\n\n{bancada.ler_mural()}"},
@@ -71,6 +102,15 @@ def rodar_turno(raiz: str | Path, agente: str, motivo: str, llm: LLM, max_passos
         resultado.tokens_entrada += resposta.tokens_entrada
         resultado.tokens_saida += resposta.tokens_saida
         if not resposta.chamadas:
+            pendentes = no_inicio & _abertos_meus(raiz, agente)
+            if pendentes and lembretes > 0:
+                lembretes -= 1
+                resultado.lembretes += 1
+                mensagens.append({"role": "assistant", "content": resposta.texto or ""})
+                mensagens.append({"role": "user", "content": (
+                    "Ainda estão abertos para você: " + "; ".join(sorted(pendentes)) + ". Antes de terminar, responda a "
+                    "quem pediu com deixar_recado (responde = o nome do recado) e feche cada um com fechar_recado.")})
+                continue
             resultado.resposta = resposta.texto.strip()
             break
         mensagens.append({"role": "assistant", "content": resposta.texto or "",

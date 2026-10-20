@@ -52,6 +52,7 @@ class Turno:
     saida: str = ""
     segundos: float = 0.0
     ferramentas: list = field(default_factory=list)  # trilha de auditoria (motor próprio)
+    detalhes: list = field(default_factory=list)
     recusas: int = 0
     tokens: int = 0
 
@@ -142,8 +143,10 @@ class ExecutorLLM:
         motivo = m.group(1) if m else texto
         if motivo.startswith(ENTRADA):
             nome = motivo[len(ENTRADA):]
-            motivo += (f'. É um pedido novo: leia a nota com ler_nota("{nome}") e, em todo recado que abrir para ele, '
-                       f'passe pedido="{nome}"')
+            arquivo = Path(raiz) / "00-Entrada" / f"{nome}.md"
+            texto_pedido = arquivo.read_text(encoding="utf-8").strip() if arquivo.is_file() else ""
+            motivo += (f'. É um pedido novo do humano. Em todo recado que abrir para ele, passe pedido="{nome}". '
+                       f"Texto do pedido:\n\n{texto_pedido}")
         self.ultimo = rodar_turno(raiz, agente, motivo, self.llm, self.max_passos)
         return self.ultimo.resposta
 
@@ -204,10 +207,18 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
     return execucao
 
 
+def _resumo_chamada(r) -> str:
+    a = r.argumentos or {}
+    chave = next((str(a[k]) for k in ("para", "pasta", "nome", "consulta") if a.get(k)), "")
+    extra = f" ({a.get('assunto') or a.get('titulo')})" if (a.get("assunto") or a.get("titulo")) else ""
+    return f"{r.ferramenta}({chave[:50]}){extra[:70]}" + ("" if r.ok else f" RECUSADO: {r.resultado[10:90]}")
+
+
 def _anotar_motor(turno: Turno, executor) -> None:
     ultimo = getattr(executor, "ultimo", None)
     if ultimo is not None:
         turno.ferramentas = [(r.ferramenta, r.ok) for r in ultimo.registros]
+        turno.detalhes = [_resumo_chamada(r) for r in ultimo.registros]
         turno.recusas = ultimo.recusas
         turno.tokens = ultimo.tokens_entrada + ultimo.tokens_saida
 
