@@ -308,10 +308,13 @@ def test_motor_corrige_so_a_forma_dos_argumentos(cofre):
     b = Bancada(cofre, "dev")
     ok, _ = b.executar("escrever_nota", {"pasta:": "projetos", "nome": "Status", "texto": "ok", "extra": 1})
     assert ok and (cofre / "Projetos" / "Status.md").is_file()
+    # recado para si mesmo respondendo a um recado: o destino é corrigido para quem pediu
     ok, saida = b.executar("deixar_recado", {"para": "dev", "assunto": "x", "texto": "y", "nome": nome})
-    assert not ok and "você mesmo" in saida and "'maestro'" in saida
-    ok, _ = b.executar("deixar_recado", {"para": "maestro", "assunto": "x", "mensagem": "y", "recado": nome})
-    assert ok
+    assert ok and "destino corrigido" in saida and "'maestro'" in saida
+    assert ler_cofre(cofre)[nome.lower()].meta["status"] == "feito"
+    # sem nenhum recado aberto para deduzir, continua recusado
+    ok, saida = b.executar("deixar_recado", {"para": "dev", "assunto": "x", "mensagem": "y"})
+    assert not ok and "você mesmo" in saida
     ok, _ = b.executar("fechar_recado", {"recado": nome})
     assert ok
 
@@ -359,3 +362,11 @@ def test_avaliacao_sobrevive_a_cenario_que_quebra(tmp_path):
     rel = avaliacao.avaliar(Quebrado(), cenarios, aviso=lambda _: None, parcial=tmp_path / "p.json")
     assert rel["resumo"]["cenarios"] == 2 and all(c["parou_por"].startswith("erro: TimeoutError") for c in rel["cenarios"])
     assert (tmp_path / "p.json").is_file()
+
+
+def test_mural_mostra_o_proximo_passo(cofre):
+    pedido = _recado(cofre, "maestro", "dev", "Status")
+    assert f'responde="{pedido}"' in Bancada(cofre, "dev").ler_mural()
+    resposta = mural.escrever_recado(cofre, "dev", "maestro", "CI verde", "verde", responde=pedido).stem
+    texto = Bancada(cofre, "maestro").ler_mural()
+    assert "Entregue a arthur" in texto and f'responde="{resposta}"' in texto

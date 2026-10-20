@@ -69,8 +69,15 @@ class Bancada:
         partes = []
         for r in abertos:
             m = r.meta
+            passo = ""
+            if self.agente == "maestro" and m.get("responde") and str(m.get("de", "")).lower() != mural.HUMANO:
+                passo = (f"\nPRÓXIMO PASSO: isto é o resultado do {m.get('de')}. Entregue a {mural.HUMANO} com "
+                         f'deixar_recado(para="{mural.HUMANO}", responde="{r.nome}", ...), resumindo o resultado.')
+            elif self.agente != "maestro":
+                passo = (f'\nPRÓXIMO PASSO: faça o trabalho e responda com deixar_recado(para="{m.get("de")}", '
+                         f'responde="{r.nome}", ...).')
             partes.append(f"### {r.nome}\nde: {m.get('de')} · assunto: {m.get('assunto')} · pedido: {m.get('pedido', '-')}\n"
-                          f"{r.corpo.strip()}")
+                          f"{r.corpo.strip()}{passo}")
         return "\n\n".join(partes)
 
     def ler_nota(self, nome: str) -> str:
@@ -98,13 +105,20 @@ class Bancada:
         para = para.lower().strip().strip("`@ ")
         if para not in self.conhecidos:
             raise Recusa(f"'{para}' não é um agente do cofre. Agentes: {', '.join(sorted(self.conhecidos))}")
+        redirecionado = ""
         if para == self.agente:
-            dica = ""
+            # Recado para si mesmo é engano de endereço: se dá para saber a quem ele responde, corrige o destino.
+            meus_abertos = mural.abertos_para(ler_cofre(self.raiz), self.agente)
+            original = None
             if responde:
                 original = resolver(ler_cofre(self.raiz), Path(responde.strip("[] ")).stem)
-                if original is not None:
-                    dica = f" Você está respondendo a um recado de '{original.meta.get('de')}': mande para ele."
-            raise Recusa("você não pode deixar recado para você mesmo." + dica)
+            elif len(meus_abertos) == 1:
+                original = meus_abertos[0]
+                responde = original.nome
+            destino = str(original.meta.get("de", "")).lower() if original is not None else ""
+            if not destino or destino == self.agente:
+                raise Recusa("você não pode deixar recado para você mesmo; mande para quem pediu o trabalho.")
+            para, redirecionado = destino, f" (destino corrigido: você mandou para si mesmo, foi para '{destino}', que pediu)"
         self._checar_sensivel(texto + " " + assunto)
         notas = ler_cofre(self.raiz)
         meus = mural.abertos_para(notas, self.agente)
@@ -129,8 +143,9 @@ class Bancada:
         resolvido = next((r for r in meus if responde and r.nome.lower() == responde.lower()), None)
         if resolvido is not None:
             mural.mudar_status(self.raiz / resolvido.caminho, "feito")
-            return f"Recado criado: {arquivo.stem}. O recado que você respondeu ({resolvido.nome}) foi marcado como resolvido."
-        return f"Recado criado: {arquivo.stem}"
+            return (f"Recado criado: {arquivo.stem}{redirecionado}. O recado que você respondeu ({resolvido.nome}) "
+                    f"foi marcado como resolvido.")
+        return f"Recado criado: {arquivo.stem}{redirecionado}"
 
     def fechar_recado(self, nome: str, status: str = "feito") -> str:
         """Muda o status de um recado endereçado a você (feito ou recusado)."""
