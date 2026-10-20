@@ -129,6 +129,10 @@ def localizar(raiz: str | Path, referencia: str) -> Path:
     if direto.is_file():
         return direto
     trecho = Path(referencia).stem.lower() if referencia.lower().endswith(".md") else referencia.lower()
+    trecho = trecho.strip().strip("[]").strip()
+    exatos = [p for p in (raiz / "Mural").glob("*.md") if p.stem.lower() == trecho]
+    if exatos:
+        return exatos[0]
     candidatos = [p for p in (raiz / "Mural").glob("*.md") if trecho in p.stem.lower()]
     if len(candidatos) == 1:
         return candidatos[0]

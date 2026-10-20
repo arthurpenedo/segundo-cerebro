@@ -24,8 +24,22 @@ def _sem_acento(texto: str) -> str:
     return unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode().lower()
 
 
+def _radical(t: str) -> str:
+    """Plural e diminutivos mais comuns do português, sem dicionário: "notas" e "nota" viram o mesmo termo."""
+    if len(t) <= 3 or t.isdigit():
+        return t
+    for sufixo, troca in (("oes", "ao"), ("aes", "ao"), ("ais", "al"), ("eis", "el"), ("is", "il"), ("ns", "m"), ("es", ""), ("s", "")):
+        if t.endswith(sufixo) and len(t) - len(sufixo) >= (2 if troca else 3):
+            novo = t[: -len(sufixo)] + troca
+            # "es" só sai quando a palavra fica terminando em consoante que pede o "e" (flores, mulheres, vezes)
+            if sufixo == "es" and not novo.endswith(("r", "z", "l")):
+                novo = t[:-1]
+            return novo
+    return t
+
+
 def termos(texto: str) -> list[str]:
-    return [t for t in _PALAVRA.findall(_sem_acento(texto)) if t not in _VAZIAS and len(t) > 1]
+    return [_radical(t) for t in _PALAVRA.findall(_sem_acento(texto)) if t not in _VAZIAS and len(t) > 1]
 
 
 @dataclass
@@ -84,7 +98,7 @@ def trecho(corpo: str, q: list[str], largura: int = 220) -> str:
     melhor, inicio = -1, 0
     for i in range(0, max(1, len(texto) - largura + 1), 40):
         janela = sem[i:i + largura]
-        n = sum(janela.count(t) for t in q)
+        n = sum(janela.count(t[:5]) for t in q)
         if n > melhor:
             melhor, inicio = n, i
     pedaco = texto[inicio:inicio + largura]

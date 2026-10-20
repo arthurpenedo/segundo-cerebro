@@ -13,8 +13,10 @@ a nota do agente não permite. Regras que valem para qualquer modelo, do maior a
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,6 +46,7 @@ class Bancada:
     raiz: Path
     agente: str
     registros: list[Registro] = field(default_factory=list)
+    pedido_padrao: str | None = None  # pedido da Entrada que acordou o agente: entra nos recados que não disserem outro
 
     def __post_init__(self) -> None:
         self.raiz = Path(self.raiz)
@@ -92,16 +95,24 @@ class Bancada:
     def deixar_recado(self, para: str, assunto: str, texto: str, responde: str | None = None,
                       pedido: str | None = None) -> str:
         """Escreve um recado no Mural. O remetente é sempre você."""
-        para = para.lower().strip()
+        para = para.lower().strip().strip("`@ ")
         if para not in self.conhecidos:
             raise Recusa(f"'{para}' não é um agente do cofre. Agentes: {', '.join(sorted(self.conhecidos))}")
+        if para == self.agente:
+            dica = ""
+            if responde:
+                original = resolver(ler_cofre(self.raiz), Path(responde.strip("[] ")).stem)
+                if original is not None:
+                    dica = f" Você está respondendo a um recado de '{original.meta.get('de')}': mande para ele."
+            raise Recusa("você não pode deixar recado para você mesmo." + dica)
         self._checar_sensivel(texto + " " + assunto)
         if responde:
             responde = Path(responde.strip("[] ")).stem
             if resolver(ler_cofre(self.raiz), responde) is None:
                 raise Recusa(f"o recado '{responde}' não existe; use o nome exato que aparece em ler_mural")
         try:
-            arquivo = mural.escrever_recado(self.raiz, self.agente, para, assunto, texto, responde=responde, pedido=pedido)
+            arquivo = mural.escrever_recado(self.raiz, self.agente, para, assunto, texto, responde=responde,
+                                            pedido=pedido or (None if responde else self.pedido_padrao))
         except mural.RecadoRecusado as e:
             raise Recusa(str(e)) from e
         return f"Recado criado: {arquivo.stem}"
@@ -123,8 +134,9 @@ class Bancada:
 
     def escrever_nota(self, pasta: str, titulo: str, conteudo: str) -> str:
         """Cria ou substitui uma nota numa pasta onde você pode escrever."""
-        if pasta.lower() == "mural":
+        if _chave(pasta) == "mural":
             raise Recusa("no Mural só se escreve com `deixar_recado`")
+        pasta = next((p for p in self.pode_escrever if _chave(p) == _chave(pasta)), pasta)
         if pasta not in self.pode_escrever:
             raise Recusa(f"você só pode escrever em: {', '.join(self.pode_escrever) or 'nenhuma pasta'}")
         nome = re.sub(r'[\\/:*?"<>|\[\]#^]+', " ", titulo).strip()[:80]
@@ -150,13 +162,42 @@ class Bancada:
         try:
             if funcao is None:
                 raise Recusa(f"ferramenta desconhecida: {nome}. Disponíveis: {', '.join(NOMES)}")
-            resultado, ok = str(funcao(**(argumentos or {}))), True
+            resultado, ok = str(funcao(**_ajustar_argumentos(nome, funcao, argumentos or {}))), True
         except Recusa as e:
             resultado, ok = f"RECUSADO: {e}", False
         except TypeError as e:
             resultado, ok = f"ERRO nos argumentos: {e}", False
         self.registros.append(Registro(nome, argumentos or {}, ok, resultado[:500]))
         return ok, resultado
+
+
+def _chave(texto: str) -> str:
+    return unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode().lower().strip(" /")
+
+
+# Nomes que modelos pequenos inventam para os parâmetros, por ferramenta.
+_SINONIMOS = {
+    "deixar_recado": {"nome": "responde", "recado": "responde", "resposta_a": "responde", "em_resposta_a": "responde",
+                      "mensagem": "texto", "conteudo": "texto", "corpo": "texto", "destinatario": "para", "agente": "para",
+                      "titulo": "assunto"},
+    "fechar_recado": {"recado": "nome", "arquivo": "nome", "responde": "nome"},
+    "escrever_nota": {"texto": "conteudo", "corpo": "conteudo", "nome": "titulo", "assunto": "titulo"},
+    "ler_nota": {"titulo": "nome", "nota": "nome"},
+    "buscar": {"termo": "consulta", "texto": "consulta", "query": "consulta"},
+}
+
+
+def _ajustar_argumentos(ferramenta: str, funcao: Callable, argumentos: dict) -> dict:
+    """Corrige só a forma ("pasta:", sinônimo, parâmetro a mais); o conteúdo continua passando pelas regras."""
+    aceitos = set(inspect.signature(funcao).parameters)
+    sinonimos = _SINONIMOS.get(ferramenta, {})
+    ajustados: dict = {}
+    for chave, valor in argumentos.items():
+        k = _chave(chave).strip(":").replace(" ", "_")
+        k = k if k in aceitos else sinonimos.get(k, k)
+        if k in aceitos and k not in ajustados and valor not in (None, ""):
+            ajustados[k] = valor
+    return ajustados
 
 
 def _prop(tipo: str, descricao: str) -> dict:

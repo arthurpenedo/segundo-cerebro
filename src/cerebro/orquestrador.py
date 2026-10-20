@@ -138,16 +138,20 @@ class ExecutorLLM:
         self.llm, self.max_passos, self.ultimo = llm, max_passos, None
 
     def __call__(self, agente: str, texto: str, raiz: Path) -> str:
-        from .agente import rodar_turno
+        from .agente import rodar_turno, sugerir_agentes
         m = re.search(r"segundo-cerebro \((.*?)\)\. ", texto, re.S)
         motivo = m.group(1) if m else texto
+        pedido = None
         if motivo.startswith(ENTRADA):
             nome = motivo[len(ENTRADA):]
             arquivo = Path(raiz) / "00-Entrada" / f"{nome}.md"
             texto_pedido = arquivo.read_text(encoding="utf-8").strip() if arquivo.is_file() else ""
+            pedido = nome
+            sugestao = ", ".join(sugerir_agentes(Path(raiz), texto_pedido or nome)) or "veja a lista da equipe"
             motivo += (f'. É um pedido novo do humano. Em todo recado que abrir para ele, passe pedido="{nome}". '
+                       f"Pelo papel, quem mais combina com este pedido: {sugestao} (sugestão do sistema; a escolha é sua). "
                        f"Texto do pedido:\n\n{texto_pedido}")
-        self.ultimo = rodar_turno(raiz, agente, motivo, self.llm, self.max_passos)
+        self.ultimo = rodar_turno(raiz, agente, motivo, self.llm, self.max_passos, pedido=pedido)
         return self.ultimo.resposta
 
 

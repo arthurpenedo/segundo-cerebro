@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .cofre import ler_cofre
@@ -83,11 +83,21 @@ def _abertos_meus(raiz: Path, agente: str) -> set[str]:
     return {r.nome for r in abertos_para(ler_cofre(raiz), agente)}
 
 
+def sugerir_agentes(raiz: Path, pedido: str, limite: int = 2) -> list[str]:
+    """Agentes cujo papel mais combina com o pedido (BM25 sobre as notas dos agentes). É só sugestão para o maestro."""
+    from .busca import Indice
+
+    # Só o papel conta (o corpo das notas tem regras genéricas iguais para todos, que confundem o ranking).
+    candidatos = {i: replace(n, corpo="") for i, n in agentes(ler_cofre(raiz)).items()
+                  if i not in ("maestro", "secretario", "critico")}
+    return [str(r.nota.meta.get("id", r.nota.nome)).lower() for r in Indice(candidatos).buscar(pedido, limite=limite)]
+
+
 def rodar_turno(raiz: str | Path, agente: str, motivo: str, llm: LLM, max_passos: int = 12,
-                lembretes: int = 1) -> ResultadoTurno:
+                lembretes: int = 1, pedido: str | None = None) -> ResultadoTurno:
     """Roda o turno. Se o modelo parar com recados ainda abertos, o motor lembra `lembretes` vez(es)."""
     raiz, agente = Path(raiz), agente.lower()
-    bancada = Bancada(raiz, agente)
+    bancada = Bancada(raiz, agente, pedido_padrao=pedido)
     no_inicio = _abertos_meus(raiz, agente)
     mensagens = [
         {"role": "system", "content": instrucao_de_sistema(raiz, agente)},

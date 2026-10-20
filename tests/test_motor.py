@@ -301,3 +301,32 @@ def test_motor_lembra_quem_para_com_recado_aberto(cofre):
     r = rodar_turno(cofre, "dev", "teste", llm)
     assert r.lembretes == 1 and r.resposta == "agora sim"
     assert "Ainda estão abertos" in llm.recebido[1][-1]["content"]
+
+
+def test_motor_corrige_so_a_forma_dos_argumentos(cofre):
+    nome = _recado(cofre, "maestro", "dev", "Status")
+    b = Bancada(cofre, "dev")
+    ok, _ = b.executar("escrever_nota", {"pasta:": "projetos", "nome": "Status", "texto": "ok", "extra": 1})
+    assert ok and (cofre / "Projetos" / "Status.md").is_file()
+    ok, saida = b.executar("deixar_recado", {"para": "dev", "assunto": "x", "texto": "y", "nome": nome})
+    assert not ok and "você mesmo" in saida and "'maestro'" in saida
+    ok, _ = b.executar("deixar_recado", {"para": "maestro", "assunto": "x", "mensagem": "y", "recado": nome})
+    assert ok
+    ok, _ = b.executar("fechar_recado", {"recado": nome})
+    assert ok
+
+
+def test_pedido_padrao_vai_no_recado_e_sugestao_de_agente(cofre):
+    from cerebro.agente import sugerir_agentes
+
+    b = Bancada(cofre, "maestro", pedido_padrao="Nota sobre MCP")
+    ok, saida = b.executar("deixar_recado", {"para": "pesquisador", "assunto": "MCP", "texto": "explique"})
+    assert ok and ler_cofre(cofre)[saida.split(": ", 1)[1].lower()].meta["pedido"] == "Nota sobre MCP"
+    assert sugerir_agentes(cofre, "Quero uma nota curta explicando um conceito")[0] == "pesquisador"
+    assert sugerir_agentes(cofre, "Escreva um post de LinkedIn")[0] == "conteudo"
+
+
+def test_busca_entende_plural():
+    from cerebro.busca import termos
+
+    assert termos("notas posts ações") == termos("nota post ação")
