@@ -64,13 +64,15 @@ class ClienteOpenAI:
     timeout: float = 300.0
     seed: int = 42
     temperatura: float = 0.0
+    max_tokens: int = 1200  # corta resposta que entra em loop (modelos pequenos às vezes não param)
 
     @property
     def nome(self) -> str:
         return self.modelo
 
     def conversar(self, mensagens: list[dict], ferramentas: list[dict]) -> Resposta:
-        corpo = {"model": self.modelo, "messages": mensagens, "temperature": self.temperatura, "seed": self.seed}
+        corpo = {"model": self.modelo, "messages": mensagens, "temperature": self.temperatura, "seed": self.seed,
+                 "max_tokens": self.max_tokens}
         if ferramentas:
             corpo["tools"] = ferramentas
         cabecalhos = {"Authorization": f"Bearer {self.chave}"} if self.chave else {}

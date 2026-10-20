@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         from . import avaliacao
 
         cenarios = [c for c in avaliacao.carregar_cenarios() if not args.cenario or c["id"] in args.cenario]
-        relatorio = avaliacao.avaliar(_cliente(args, args.modelo), cenarios, args.max_turnos)
+        relatorio = avaliacao.avaliar(_cliente(args, args.modelo), cenarios, args.max_turnos, parcial=raiz / args.saida)
         destino = avaliacao.salvar(relatorio, raiz / args.saida)
         r = relatorio["resumo"]
         print(f"{r['aprovados']}/{r['cenarios']} cenários aprovados · entregou {r['entregou']:.0%} · "

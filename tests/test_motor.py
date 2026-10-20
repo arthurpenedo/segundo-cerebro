@@ -344,3 +344,18 @@ def test_responder_resolve_e_responde_e_deduzido(cofre):
     outro = _recado(cofre, "maestro", "dev", "Outro pedido")
     ok, saida = Bancada(cofre, "dev").executar("deixar_recado", {"para": "critico", "assunto": "revisa", "texto": "x"})
     assert ok and "resolvido" not in saida and ler_cofre(cofre)[outro.lower()].meta["status"] == "aberto"
+
+
+def test_avaliacao_sobrevive_a_cenario_que_quebra(tmp_path):
+    from cerebro import avaliacao
+
+    class Quebrado:
+        nome = "quebrado"
+
+        def conversar(self, mensagens, ferramentas):
+            raise TimeoutError("modelo não respondeu")
+
+    cenarios = avaliacao.carregar_cenarios()[:2]
+    rel = avaliacao.avaliar(Quebrado(), cenarios, aviso=lambda _: None, parcial=tmp_path / "p.json")
+    assert rel["resumo"]["cenarios"] == 2 and all(c["parou_por"].startswith("erro: TimeoutError") for c in rel["cenarios"])
+    assert (tmp_path / "p.json").is_file()

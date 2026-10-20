@@ -103,14 +103,25 @@ def rodar_cenario(cenario: dict, llm: LLM, max_turnos: int = 14, pasta: Path | N
         trilha=[f"{t.agente}: " + "; ".join(t.detalhes) + (f" → {t.saida[:120]}" if t.saida else "") for t in execucao.turnos])
 
 
-def avaliar(llm: LLM, cenarios: list[dict] | None = None, max_turnos: int = 14, aviso=print) -> dict:
+def avaliar(llm: LLM, cenarios: list[dict] | None = None, max_turnos: int = 14, aviso=print,
+            parcial: str | Path | None = None) -> dict:
     resultados = []
     for c in cenarios or carregar_cenarios():
         aviso(f"→ {c['id']}")
-        r = rodar_cenario(c, llm, max_turnos)
+        try:
+            r = rodar_cenario(c, llm, max_turnos)
+        except Exception as e:  # um cenário que quebra (ex.: modelo que não responde) não derruba a avaliação inteira
+            r = ResultadoCenario(c["id"], False, False, True, 0, len(c.get("checagens") or []), 0, [], 0, 0, 0.0,
+                                 f"erro: {type(e).__name__}: {str(e)[:150]}")
         aviso(f"   {'✓' if r.aprovado else '✗'} entregou={r.entregou} ciclo={r.ciclo_completo} íntegro={r.cofre_integro} "
               f"checagens={r.checagens_ok}/{r.checagens_total} turnos={r.turnos} recusas={r.recusas} {r.segundos}s")
         resultados.append(r)
+        if parcial:
+            salvar(_relatorio(llm, resultados), parcial)
+    return _relatorio(llm, resultados)
+
+
+def _relatorio(llm: LLM, resultados: list[ResultadoCenario]) -> dict:
     n = len(resultados) or 1
     return {
         "modelo": getattr(llm, "nome", "?"), "data": datetime.now().isoformat(timespec="minutes"),

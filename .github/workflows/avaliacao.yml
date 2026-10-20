@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
     paths: ["src/cerebro/agente.py", "src/cerebro/ferramentas.py", "src/cerebro/orquestrador.py",
+            "src/cerebro/llm.py", "src/cerebro/avaliacao.py", "src/cerebro/busca.py", "src/cerebro/mural.py",
             "src/cerebro/cenarios.yaml", "src/cerebro/modelo/**", ".github/workflows/avaliacao.yml"]
   workflow_dispatch:
   schedule:
@@ -44,8 +45,9 @@ jobs:
         run: |
           nome=$(echo "${{ matrix.modelo }}" | tr ':' '-')
           echo "NOME=$nome" >> $GITHUB_ENV
-          cerebro avaliar --modelo "${{ matrix.modelo }}" --saida "resultados/$nome.json"
+          cerebro avaliar --modelo "${{ matrix.modelo }}" --saida "resultados/$nome.json" || echo "avaliação terminou com erro; gravo o parcial"
       - name: Gravar o resultado no repositório
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
