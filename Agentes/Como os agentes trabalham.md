@@ -28,3 +28,7 @@ Os agentes **não se chamam diretamente**. Eles conversam pelo [[Mural]]: cada r
 - Ações fora do cofre (publicar, fazer deploy, mandar mensagem) viram recado para `arthur`.
 
 Agentes: [[Maestro]], [[Secretario]], [[Carreira]], [[Dev]], [[Pesquisador]], [[Conteudo]], [[Marketing]], [[Operacao]], [[Critico]].
+
+## Motor próprio (versão 1.0)
+
+Com `cerebro rodar --motor ollama`, cada agente recebe esta nota e a nota dele como instrução e trabalha com 7 ferramentas: `ler_mural`, `ler_nota`, `buscar`, `listar_notas`, `deixar_recado`, `fechar_recado` e `escrever_nota`. As regras acima são aplicadas no código: o pedido que fura uma regra volta como **RECUSADO** com o motivo, e o agente corrige. Cada chamada fica na nota de execução do [[Diario]].

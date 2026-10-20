@@ -4,6 +4,8 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Obsidian](https://img.shields.io/badge/Obsidian-cofre-7c5cff)
 ![License](https://img.shields.io/badge/license-MIT-green)
+[![Avaliação](https://github.com/arthurpenedo/segundo-cerebro/actions/workflows/avaliacao.yml/badge.svg)](https://github.com/arthurpenedo/segundo-cerebro/actions/workflows/avaliacao.yml)
+![MCP](https://img.shields.io/badge/MCP-servidor-111)
 
 > **Um segundo cérebro onde agentes de IA trabalham juntos.** É um cofre do Obsidian (uma pasta de notas em
 > Markdown) em que 9 agentes do Claude Code têm cada um seu papel e **conversam por recados** num Mural. Toda
@@ -13,6 +15,52 @@
 **Painel ao vivo:** [arthurpenedo.github.io/segundo-cerebro](https://arthurpenedo.github.io/segundo-cerebro/)
 
 ![Painel do segundo-cerebro](docs/painel.png)
+
+## Versão 1.0: de experimento a sistema
+
+| | O que é | Por que importa |
+|---|---|---|
+| **Motor próprio de agentes** | Os 9 agentes rodam com **qualquer modelo** compatível com a API da OpenAI, inclusive modelos abertos no Ollama, de graça. O Claude Code continua como opção. | Não depende de um fornecedor. A avaliação roda no CI sem custo. |
+| **Regras no código** | Cada agente usa 7 ferramentas (`ler_mural`, `buscar`, `deixar_recado`, `escrever_nota`...). Quem executa é o Python, que **recusa** o que a nota do agente não permite. | Vale para modelo grande e pequeno. Prompt pede, código garante. |
+| **Trilha de auditoria** | Cada chamada de ferramenta, aceita ou recusada, vai para a nota `Diario/Execucao ...` com tokens e tempo. | Dá para ver o que cada agente tentou fazer, não só o resultado. |
+| **Busca no cofre** | `cerebro buscar` (BM25 em Python puro, título pesa mais, conversa vem depois do conhecimento). | Os agentes e o MCP acham a nota certa sem serviço externo. |
+| **Servidor MCP** | `cerebro mcp`: o Claude Desktop ou o Claude Code buscam, leem, **fazem pedidos para a equipe** e **decidem** a Caixa. | O humano conversa com o cérebro de qualquer cliente MCP, sem furar as regras. |
+| **`cerebro init`** | Cria um cofre novo com os 9 agentes, pronto para abrir no Obsidian (dá para trocar o nome do humano). | Qualquer pessoa usa, não só o autor. |
+| **Avaliação contínua** | 5 cenários (nota de conceito, status com fonte, post revisado pelo crítico, preparo de entrevista e "publique sozinho", que tem de ser recusado). Rodam com `qwen2.5:3b` e `qwen2.5:7b` no CI, e o painel mostra as métricas. | Mede se a **equipe** entrega, não só se o código compila. |
+| **Qualidade** | Testes em Linux e Windows, Python 3.11 e 3.13, ruff, cobertura mínima de 80% e `cerebro init` validado no CI. | É um produto, não um script. |
+
+### Arquitetura
+
+```mermaid
+flowchart LR
+    H[Humano<br/>Obsidian ou cliente MCP] -- pedido --> E[00-Entrada]
+    E --> L[Laço: cerebro rodar]
+    L -- acorda o agente com recado aberto mais antigo --> A[Agente<br/>nota em Agentes/ = instrução]
+    A <-- tool calling --> M[(Modelo<br/>Ollama · OpenAI · Claude Code)]
+    A -- pede ferramenta --> B[Bancada<br/>regras no código + auditoria]
+    B -- recado --> MU[Mural]
+    B -- nota --> P[Projetos · Conhecimento · Carreira]
+    MU -- só o maestro --> C[Caixa do humano]
+    C -- decidir --> H
+    L -- fim do ciclo --> D[Diario/Execucao<br/>turnos, ferramentas, recusas, tokens]
+```
+
+### Usar no seu próprio cérebro
+
+```bash
+pip install "segundo-cerebro[mcp] @ git+https://github.com/arthurpenedo/segundo-cerebro"
+cerebro init ~/MeuCerebro --humano ana         # 9 agentes + pastas, pronto para o Obsidian
+cd ~/MeuCerebro
+echo "# Resumo da semana" > "00-Entrada/Resumo da semana.md"
+ollama pull qwen2.5:7b                           # modelo aberto, de graça
+CEREBRO_HUMANO=ana cerebro rodar --motor ollama --modelo qwen2.5:7b
+```
+
+No Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{"mcpServers": {"segundo-cerebro": {"command": "cerebro", "args": ["--cofre", "/caminho/do/cofre", "mcp"]}}}
+```
 
 ## A ideia
 
@@ -63,7 +111,8 @@ que nenhum agente teria feito sozinho no papel de "escritor".
 ## O laço automático
 
 `cerebro rodar` faz os agentes trabalharem sozinhos: enquanto houver recado aberto para um agente, ele acorda
-esse agente com o Claude Code em modo não interativo (`claude -p --agent <id>`, na assinatura, sem API).
+esse agente. Com `--motor ollama` (ou `openai`) usa o motor próprio, com tool calling e as regras aplicadas pela
+`Bancada`. Com `--motor claude` (padrão) usa o Claude Code em modo não interativo (`claude -p --agent <id>`, na assinatura).
 
 - Nota nova na Entrada acorda o Maestro e é marcada `encaminhado`.
 - Recado para `arthur` **não acorda ninguém**: é decisão humana e encerra o ciclo.
@@ -137,7 +186,13 @@ para si mesma** em vez de inventar vagas que não conseguiu confirmar.
 cerebro mural --para dev                 # o que está esperando pelo agente
 cerebro recado --de dev --para conteudo --assunto "..." --texto "..." --responde "<recado>"
 cerebro fechar "revisar-post"            # aberto -> feito (aceita um trecho único do nome)
-cerebro rodar --max-turnos 12            # laço automático (ou dois cliques em "Rodar agentes.cmd")
+cerebro rodar --max-turnos 12            # laço automático com o Claude Code (ou "Rodar agentes.cmd")
+cerebro rodar --motor ollama --modelo qwen2.5:7b   # laço com o motor próprio e um modelo aberto
+cerebro turno dev --motivo "status do CI"          # acorda um agente uma vez e mostra cada ferramenta usada
+cerebro buscar "regra no código"                   # busca BM25 no cofre
+cerebro mcp                                        # servidor MCP (stdio)
+cerebro init ~/NovoCerebro                         # cofre novo com os 9 agentes
+cerebro avaliar --modelo qwen2.5:3b                # cenários da equipe com um modelo de verdade
 cerebro caixa                            # junta os recados para o Arthur e atualiza a caixa
 cerebro --cofre ~/Cerebro hoje           # dia a dia: gera Hoje.md
 cerebro --cofre ~/Cerebro rotina         # dia a dia: faz a fila "Para o Claude" sozinho
@@ -150,13 +205,13 @@ cerebro painel --html site/index.html    # painel do Pages
 - **`cerebro validar`** quebra o build se houver link `[[...]]` sem destino, recado sem campo obrigatório ou para
   agente que não existe, agente sem papel, ou **dado sensível** (CPF, cartão, chave de API), porque o cofre é público.
 - **Painel:** HTML estático com os agentes, as conversas e o grafo de notas (d3), publicado no GitHub Pages pelo CI.
-- **Custo:** zero de API. Os agentes rodam na assinatura do Claude Code; o CI só roda Python.
+- **Custo:** zero de API. Os agentes rodam na assinatura do Claude Code ou em modelos abertos (Ollama); a avaliação roda no CI com Ollama na CPU.
 
 ## Rodar
 
 ```bash
 pip install -e ".[dev]"
-pytest -q            # 22 testes (o laço é testado com um executor falso)
+pytest -q            # 57 testes: regras da bancada, turno e ciclo completo com LLM falso, MCP, busca, init, avaliação
 cerebro validar
 ```
 
@@ -165,11 +220,15 @@ trabalhar: escreva um pedido em `00-Entrada/` (pode ser pelo próprio Obsidian) 
 
 ## Limites honestos
 
-- O laço roda na máquina (precisa do Claude Code instalado); o CI só valida e publica. Os agentes rodam um por
+- O laço roda na máquina (Claude Code ou Ollama). No CI rodam os testes e a avaliação. Os agentes rodam um por
   vez, de propósito: a ordem fica legível no Mural.
+- Modelos pequenos (3B) erram mais o protocolo de ferramentas. Para isso existem as recusas, o limite de passos por
+  turno e o laço que para se um agente não fecha nada. Os números de cada modelo estão no painel.
+- A `Bancada` controla o que o agente faz **dentro** do cofre. No modo Claude Code, a trava é a lista de ferramentas
+  liberadas, não um sandbox.
 - `criado` tem precisão de segundos: dois recados no mesmo segundo são desempatados pelo nome. Com agentes
   reais (turnos de 20 a 60 s) isso não acontece; os recados de antes da mudança tiveram a ordem corrigida à mão.
-- Responder ao Arthur ainda é manual: ele muda o `status` do recado no Obsidian ou escreve um pedido novo.
+- Responder ao Arthur: pelo Obsidian (mudando o `status`) ou pelo MCP (`decidir`, e o comentário vira pedido para o maestro).
 - O validador de dados sensíveis usa padrões simples. Ele pega os casos óbvios, não substitui o
   [lgpd-guard](https://github.com/arthurpenedo/lgpd-guard).
 - Carreira usa dados fictícios de propósito: este cofre é vitrine pública.

@@ -33,7 +33,7 @@ def ler_post(arquivo: Path) -> dict:
         return yaml.safe_load(m.group(1)) or {}
     except yaml.YAMLError:
         # rascunho escrito à mão com aspas no meio do valor: lê "chave: valor" linha a linha
-        return {k.strip(): v.strip() for k, _, v in (l.partition(":") for l in m.group(1).splitlines()) if v}
+        return {k.strip(): v.strip() for k, _, v in (linha.partition(":") for linha in m.group(1).splitlines()) if v}
 
 
 def _num(campo: str | None) -> tuple[str, str]:

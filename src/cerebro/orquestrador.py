@@ -19,10 +19,11 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 from . import caixa
 from .cofre import Nota, ler_cofre
@@ -50,6 +51,9 @@ class Turno:
     novos: int
     saida: str = ""
     segundos: float = 0.0
+    ferramentas: list = field(default_factory=list)  # trilha de auditoria (motor próprio)
+    recusas: int = 0
+    tokens: int = 0
 
 
 @dataclass
@@ -123,6 +127,27 @@ def executor_claude(modelo: str = "sonnet", comando: str = "claude", timeout: in
     return executar
 
 
+class ExecutorLLM:
+    """Executor do motor próprio: roda o turno com qualquer LLM compatível com a OpenAI (ex.: Ollama, de graça).
+
+    Guarda o último `ResultadoTurno` para o laço registrar ferramentas, recusas e tokens no Diário.
+    """
+
+    def __init__(self, llm, max_passos: int = 12):
+        self.llm, self.max_passos, self.ultimo = llm, max_passos, None
+
+    def __call__(self, agente: str, texto: str, raiz: Path) -> str:
+        from .agente import rodar_turno
+        m = re.search(r"segundo-cerebro \((.*?)\)\. ", texto, re.S)
+        motivo = m.group(1) if m else texto
+        if motivo.startswith(ENTRADA):
+            nome = motivo[len(ENTRADA):]
+            motivo += (f'. É um pedido novo: leia a nota com ler_nota("{nome}") e, em todo recado que abrir para ele, '
+                       f'passe pedido="{nome}"')
+        self.ultimo = rodar_turno(raiz, agente, motivo, self.llm, self.max_passos)
+        return self.ultimo.resposta
+
+
 def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
           aviso: Callable[[str], None] = print, diario: bool = True) -> Execucao:
     raiz = Path(raiz)
@@ -154,6 +179,7 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
         depois_notas = ler_cofre(raiz)
         ainda = {r.nome for r in _abertos(depois_notas)}
         turno = Turno(agente, motivo, len(antes - ainda), len(recados(depois_notas)) - total_antes, saida, segundos)
+        _anotar_motor(turno, executor)
         execucao.turnos.append(turno)
         trabalhou = True
         aviso(f"    fechou {turno.fechados}, criou {turno.novos}" + (f" · {saida.splitlines()[0][:120]}" if saida else ""))
@@ -165,7 +191,9 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
         aviso("[fim] secretario ← escrever o diário do ciclo")
         inicio = time.perf_counter()
         saida = executor("secretario", instrucao("secretario", "fim do ciclo: escreva/atualize o Diário de hoje e processe a Entrada"), raiz)
-        execucao.turnos.append(Turno("secretario", "diário do ciclo", 0, 0, saida, time.perf_counter() - inicio))
+        turno = Turno("secretario", "diário do ciclo", 0, 0, saida, time.perf_counter() - inicio)
+        _anotar_motor(turno, executor)
+        execucao.turnos.append(turno)
     if trabalhou:
         execucao.substituidos = caixa.consolidar(raiz)
         caixa.gerar_nota(raiz)
@@ -176,6 +204,14 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
     return execucao
 
 
+def _anotar_motor(turno: Turno, executor) -> None:
+    ultimo = getattr(executor, "ultimo", None)
+    if ultimo is not None:
+        turno.ferramentas = [(r.ferramenta, r.ok) for r in ultimo.registros]
+        turno.recusas = ultimo.recusas
+        turno.tokens = ultimo.tokens_entrada + ultimo.tokens_saida
+
+
 def _registrar(raiz: Path, execucao: Execucao) -> Path:
     agora = datetime.now()
     destino = raiz / "Diario" / f"Execucao {agora:%Y-%m-%d %H%M}.md"
@@ -184,6 +220,12 @@ def _registrar(raiz: Path, execucao: Execucao) -> Path:
                        for i, t in enumerate(execucao.turnos, 1))
     respostas = "\n\n".join(f"**{i}. {t.agente}:** " + " ".join(t.saida.split())[:600]
                               for i, t in enumerate(execucao.turnos, 1) if t.saida)
+    trilha = "\n".join(f"| {i} | {t.agente} | " + ", ".join(f"{n}{'' if ok else ' (recusado)'}" for n, ok in t.ferramentas)
+                       + f" | {t.recusas} | {t.tokens} |" for i, t in enumerate(execucao.turnos, 1) if t.ferramentas)
+    if trilha:
+        trilha = ("\n## Ferramentas usadas (motor próprio)\n\n| # | Agente | Ferramentas | Recusas | Tokens |\n"
+                  "|---|---|---|---|---|\n" + trilha + "\n")
+    caixa_nome = caixa.NOTA[:-3]
     destino.write_text(f"""---
 tipo: execucao
 data: {agora:%Y-%m-%d}
@@ -191,12 +233,12 @@ turnos: {len(execucao.turnos)}
 ---
 # Execução do laço automático · {agora:%d/%m/%Y %H:%M}
 
-Parou por: {execucao.parou_por}. Recados para {HUMANO} substituídos pelo mais recente do pedido: {execucao.substituidos}. Decisões pendentes: [[Caixa do Arthur]].
+Parou por: {execucao.parou_por}. Recados para {HUMANO} substituídos pelo mais recente do pedido: {execucao.substituidos}. Decisões pendentes: [[{caixa_nome}]].
 
 | # | Agente | Por quê | Recados fechados | Recados criados | Tempo |
 |---|---|---|---|---|---|
 {linhas}
-
+{trilha}
 ## O que cada agente respondeu
 
 {respostas}

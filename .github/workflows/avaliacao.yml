@@ -1,0 +1,55 @@
+name: Avaliação
+
+# Roda os cenários da equipe de agentes com modelos abertos de verdade (Ollama na CPU do runner, custo zero)
+# e grava as métricas em resultados/. O painel lê esses arquivos.
+on:
+  push:
+    branches: [main]
+    paths: ["src/cerebro/agente.py", "src/cerebro/ferramentas.py", "src/cerebro/orquestrador.py",
+            "src/cerebro/cenarios.yaml", "src/cerebro/modelo/**", ".github/workflows/avaliacao.yml"]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"  # toda segunda
+
+permissions:
+  contents: write
+
+concurrency:
+  group: avaliacao
+  cancel-in-progress: true
+
+jobs:
+  avaliar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        modelo: ["qwen2.5:3b", "qwen2.5:7b"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e .
+      - name: Instalar o Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Subir o Ollama e baixar o modelo
+        run: |
+          nohup ollama serve > ollama.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:11434/api/tags >/dev/null && break; sleep 2; done
+          ollama pull "${{ matrix.modelo }}"
+      - name: Avaliar
+        run: |
+          nome=$(echo "${{ matrix.modelo }}" | tr ':' '-')
+          echo "NOME=$nome" >> $GITHUB_ENV
+          cerebro avaliar --modelo "${{ matrix.modelo }}" --saida "resultados/$nome.json"
+      - name: Gravar o resultado no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase --autostash
+          git add resultados/
+          git commit -m "Avaliação: ${{ matrix.modelo }}" || exit 0
+          git push

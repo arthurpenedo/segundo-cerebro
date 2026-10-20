@@ -221,7 +221,7 @@ def commitar_projetos(raiz: Path, projetos: Path, hoje: date) -> list[str]:
         if nota.stem == "Projetos" or not pasta.is_dir():
             continue
 
-        def git(*args: str) -> subprocess.CompletedProcess:
+        def git(*args: str, pasta: Path = pasta) -> subprocess.CompletedProcess:
             return subprocess.run(["git", "-C", str(pasta), *args], capture_output=True, text=True, encoding="utf-8")
 
         if not (pasta / ".git").exists():
@@ -263,7 +263,7 @@ def publicar_projetos(projetos: Path, hoje: date, ignorar=frozenset(), remoto: s
     diff não tem cara de segredo. O que falha fica só local (ou nem é commitado) e aparece no relatório."""
     relatorio = []
     for pasta in sorted(p for p in Path(projetos).iterdir() if (p / ".git").exists() and p.name not in ignorar):
-        def git(*args: str) -> subprocess.CompletedProcess:
+        def git(*args: str, pasta: Path = pasta) -> subprocess.CompletedProcess:
             return subprocess.run(["git", "-C", str(pasta), *args], capture_output=True, text=True, encoding="utf-8")
 
         arquivo_msg = pasta / MSG_COMMIT

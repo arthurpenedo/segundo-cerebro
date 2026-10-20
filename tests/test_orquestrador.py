@@ -137,7 +137,7 @@ def test_caixa_deixa_so_o_mais_recente_por_pedido(tmp_path):
                               hoje=datetime(2026, 10, 9, hora))
     assert caixa.consolidar(raiz) == 1
     grupos = caixa.abertos_para_humano(cofre.ler_cofre(raiz))
-    assert {p: [r.meta["assunto"] for r in l] for p, l in grupos.items()} == {"Pedido A": ["A pronto"], "Pedido B": ["B começou"]}
+    assert {p: [r.meta["assunto"] for r in lista] for p, lista in grupos.items()} == {"Pedido A": ["A pronto"], "Pedido B": ["B começou"]}
     antigo = next((raiz / "Mural").glob("*a-comecou.md")).read_text(encoding="utf-8")
     assert "status: substituido" in antigo and "Substituído por [[2026-10-09 maestro para arthur a-pronto]]" in antigo
     nota = caixa.gerar_nota(raiz).read_text(encoding="utf-8")

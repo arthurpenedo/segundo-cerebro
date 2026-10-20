@@ -16,6 +16,7 @@ navegável no Obsidian.
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from datetime import date, datetime
@@ -26,7 +27,7 @@ import yaml
 from .cofre import Nota
 
 STATUS = ("aberto", "feito", "recusado", "substituido")
-HUMANO = "arthur"
+HUMANO = os.getenv("CEREBRO_HUMANO", "arthur").lower()  # quem recebe as decisões
 
 
 def recados(notas: dict[str, Nota]) -> list[Nota]:

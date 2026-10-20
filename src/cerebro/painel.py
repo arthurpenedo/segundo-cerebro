@@ -8,8 +8,8 @@ import re
 from collections import Counter
 from datetime import date
 
-from .cofre import Nota, resolver
 from .caixa import abertos_para_humano
+from .cofre import Nota, resolver
 from .mural import agentes, conversas, recados
 
 CORES = {"Agentes": "#7c5cff", "Mural": "#f08c2e", "Projetos": "#2f9e6e", "Carreira": "#4c8dd5",
@@ -32,6 +32,7 @@ border:1px solid var(--borda)}.aberto{color:#c46a00}.feito{color:#2f9e6e}.recusa
 .link{color:var(--destaque);font-weight:500}#grafo{width:100%;height:520px;background:var(--cartao);
 border:1px solid var(--borda);border-radius:12px}.leg span{display:inline-block;margin-right:14px;font-size:13px}
 .leg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+table{width:100%;border-collapse:collapse;background:var(--cartao);border:1px solid var(--borda);border-radius:12px;overflow:hidden;font-size:14px;margin:8px 0}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--borda)}details{margin:8px 0}summary{cursor:pointer;color:var(--destaque)}
 footer{margin-top:48px;color:var(--suave);font-size:13px}a{color:var(--destaque)}
 """
 
@@ -53,7 +54,33 @@ def _grafo(notas: dict[str, Nota]) -> dict:
     return {"nodes": nos, "links": arestas}
 
 
-def gerar(notas: dict[str, Nota], titulo: str = "segundo-cerebro") -> str:
+def _avaliacao_html(avaliacoes: list[dict]) -> str:
+    """Seção com a avaliação da equipe em modelos abertos (arquivos de resultados/)."""
+    if not avaliacoes:
+        return ("<p class='det'>Ainda sem avaliação. O workflow <code>Avaliação</code> roda os cenários com modelos abertos "
+                "(Ollama) e grava os resultados em <code>resultados/</code>.</p>")
+    def pct(x: float) -> str:
+        return f"{x:.0%}"
+    linhas = ""
+    for a in sorted(avaliacoes, key=lambda a: a.get("modelo", "")):
+        r = a["resumo"]
+        linhas += (f"<tr><td><b>{html.escape(a.get('modelo', '?'))}</b></td><td>{r['aprovados']}/{r['cenarios']}</td>"
+                   f"<td>{pct(r['entregou'])}</td><td>{pct(r['ciclo_completo'])}</td><td>{pct(r['cofre_integro'])}</td>"
+                   f"<td>{pct(r['checagens'])}</td><td>{r['turnos_medio']}</td><td>{r['recusas_total']}</td>"
+                   f"<td>{r['segundos_total'] / 60:.0f} min</td><td class='det'>{html.escape(a.get('data', '')[:10])}</td></tr>")
+    detalhes = ""
+    for a in avaliacoes:
+        itens = "".join(
+            f"<tr><td>{'✅' if c['aprovado'] else '❌'} {html.escape(c['id'])}</td><td>{c['checagens_ok']}/{c['checagens_total']}</td>"
+            f"<td>{html.escape(' → '.join(c['agentes']))}</td><td>{c['recusas']}</td><td class='det'>{html.escape(c['parou_por'])}</td></tr>"
+            for c in a["cenarios"])
+        detalhes += (f"<details><summary>{html.escape(a.get('modelo', '?'))}: cenário a cenário</summary><table>"
+                     f"<tr><th>Cenário</th><th>Checagens</th><th>Quem trabalhou</th><th>Recusas</th><th>Parou por</th></tr>{itens}</table></details>")
+    return ("<table><tr><th>Modelo</th><th>Aprovados</th><th>Entregou</th><th>Ciclo completo</th><th>Cofre íntegro</th>"
+            f"<th>Checagens</th><th>Turnos/cenário</th><th>Recusas das regras</th><th>Tempo</th><th>Data</th></tr>{linhas}</table>{detalhes}")
+
+
+def gerar(notas: dict[str, Nota], titulo: str = "segundo-cerebro", avaliacoes: list[dict] | None = None) -> str:
     todos_recados = recados(notas)
     status = Counter(str(r.meta.get("status")) for r in todos_recados)
     por_agente = Counter(str(r.meta.get("de")) for r in todos_recados)
@@ -94,6 +121,10 @@ def gerar(notas: dict[str, Nota], titulo: str = "segundo-cerebro") -> str:
 <h2>Esperando pelo Arthur</h2><p class="sub">Só o Maestro fala com o humano, e só o recado mais recente de cada pedido fica aberto.</p>
 <div class="grade">{caixa_html}</div>
 <h2>Agentes</h2><div class="grade">{cartoes}</div>
+<h2>Avaliação com modelos abertos</h2><p class="sub">Cada cenário cria um cérebro novo, faz um pedido e mede se a equipe
+entrega ao humano, sem quebrar regra nem deixar o cofre inválido. Recusas são tentativas que o código barrou
+(escrever fora da pasta, falar direto com o humano...). Roda no CI com Ollama, custo zero.</p>
+{_avaliacao_html(avaliacoes or [])}
 <h2>Grafo do cofre</h2><p class="sub">Cada ponto é uma nota; cada linha, um link [[...]]. Arraste para explorar.</p>
 <div class="leg">{legenda}</div><svg id="grafo"></svg>
 <h2>Conversas no Mural</h2><p class="sub">Os agentes não se chamam diretamente: deixam recados uns para os outros, e cada um lê os seus ao começar.</p>

@@ -110,7 +110,7 @@ def test_so_o_maestro_fala_com_o_arthur(tmp_path, capsys):
     raiz = _cofre(tmp_path)
     try:
         mural.escrever_recado(raiz, "dev", "arthur", "Pronto", "x")
-        assert False, "deveria recusar"
+        raise AssertionError("deveria recusar")
     except mural.RecadoRecusado as erro:
         assert "mande este recado para o maestro" in str(erro)
     assert not (raiz / "Mural").exists() or not list((raiz / "Mural").glob("*.md"))

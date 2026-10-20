@@ -14,7 +14,7 @@ from pathlib import Path
 from .cofre import Nota, ler_cofre
 from .mural import HUMANO, conversas, mudar_status, recados
 
-NOTA = "Caixa do Arthur.md"
+NOTA = f"Caixa do {HUMANO.title()}.md"
 
 
 def _pedido_de(notas: dict[str, Nota]) -> dict[str, str]:

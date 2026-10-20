@@ -8,3 +8,5 @@ site/
 .obsidian/cache
 .trash/
 .rascunhos/
+.coverage
+.ruff_cache/

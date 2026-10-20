@@ -14,6 +14,8 @@ trabalho dos agentes. Comece por `Inicio.md` e `Agentes/Como os agentes trabalha
 - **Fora do cofre** (publicar, deploy, mandar mensagem, gastar dinheiro): vira recado para `arthur`.
 - **Comandos:** um por vez, sem encadear. Texto longo de recado vai por arquivo: `--texto-arquivo .rascunhos/<nome>.txt`.
 - **Laço automático:** `cerebro rodar` acorda o agente com recado aberto mais antigo até sobrar só recado para `arthur`.
+  Com `--motor ollama` os agentes usam as ferramentas da `Bancada` (`ferramentas.py`), que aplicam estas regras no código.
+- **Busca:** `cerebro buscar "<termos>"` acha a nota certa antes de escrever uma nova.
 - Antes de terminar: `cerebro validar` precisa passar.
 
 Instalação das ferramentas: `pip install -e .` (comando `cerebro`).
