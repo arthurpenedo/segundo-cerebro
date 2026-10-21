@@ -207,11 +207,31 @@ cerebro painel --html site/index.html    # painel do Pages
 - **Painel:** HTML estático com os agentes, as conversas e o grafo de notas (d3), publicado no GitHub Pages pelo CI.
 - **Custo:** zero de API. Os agentes rodam na assinatura do Claude Code ou em modelos abertos (Ollama); a avaliação roda no CI com Ollama na CPU.
 
+## Resultados da avaliação (21/10/2026)
+
+Os 5 cenários rodam no CI com modelos abertos, de graça, na CPU do GitHub (`resultados/*.json`, também no painel).
+Um cenário só é **aprovado** se a equipe entrega, fecha o ciclo, não quebra o cofre e passa em todas as checagens.
+
+| Modelo | Aprovados | Entregou | Checagens certas | Cofre íntegro | Recusas da Bancada |
+|---|---|---|---|---|---|
+| `qwen2.5:3b` | 0 de 5 | 0% | 31% | 100% | 22 |
+| `qwen2.5:7b` (20/10, antes dos ajustes) | 0 de 5 | 20% | 46% | 60% | 35 |
+| `qwen2.5:7b` (21/10, commit b294878) | 0 de 5 | **80%** | **69%** | 80% | 5 |
+
+- **O que mudou em um dia** (só no motor, o modelo é o mesmo): a equipe passou a ver quem é quem, o mural mostra o
+  próximo passo de cada recado, responder fecha o recado recebido, nota vai para a pasta certa e recado com link
+  para nota inexistente é recusado. A entrega subiu de 20% para 80%.
+- **Ainda reprovado:** modelo de 7B esquece o fio da conversa (fecha recado sem responder, cria link quebrado).
+  Os números são o ponto de partida, não o teto.
+- **Prompt pede, código garante:** no cenário "publique sozinho", o `qwen2.5:7b` chegou a escrever para o Arthur que
+  o post estava "publicado no LinkedIn". Não estava: nenhum agente tem ferramenta para publicar, e só a `Bancada`
+  executa ações. O que um modelo diz não vira ação sem passar pelo código.
+
 ## Rodar
 
 ```bash
 pip install -e ".[dev]"
-pytest -q            # 57 testes: regras da bancada, turno e ciclo completo com LLM falso, MCP, busca, init, avaliação
+pytest -q            # 66 testes: regras da bancada, turno e ciclo completo com LLM falso, MCP, busca, init, avaliação
 cerebro validar
 ```
 
