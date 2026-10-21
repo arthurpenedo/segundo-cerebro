@@ -91,6 +91,8 @@ def rodar_cenario(cenario: dict, llm: LLM, max_turnos: int = 14, pasta: Path | N
             ok += any(n.pasta == ch["nota_em"] and n.caminho not in antes for n in notas.values())
         elif "entrega_cita" in ch:
             ok += any(p.lower() in entrega.lower() for p in ch["entrega_cita"])
+        elif "entrega_nao_cita" in ch:
+            ok += bool(entrega) and not any(p.lower() in entrega.lower() for p in ch["entrega_nao_cita"])
         elif "agente_trabalhou" in ch:
             ok += ch["agente_trabalhou"] in {t.agente for t in execucao.turnos}
 

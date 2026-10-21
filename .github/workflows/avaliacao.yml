@@ -72,14 +72,14 @@ jobs:
           merge-multiple: true
       - name: Juntar e gravar no repositório
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase  # antes de escrever: outro job pode ter gravado resultados enquanto este rodava
           for modelo in qwen2.5:3b qwen2.5:7b; do
             nome=$(echo "$modelo" | tr ':' '-')
             ls parciais/$nome/*.json >/dev/null 2>&1 || continue
             cerebro avaliar --modelo "$modelo" --juntar parciais/$nome/*.json --saida "resultados/$nome.json"
           done
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase --autostash
           git add resultados/
           git commit -m "Avaliação: qwen2.5:3b e qwen2.5:7b" || exit 0
           git push

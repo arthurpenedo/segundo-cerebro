@@ -128,6 +128,11 @@ class Bancada:
             para, redirecionado = destino, f" (destino corrigido: você mandou para si mesmo, foi para '{destino}', que pediu)"
         self._checar_sensivel(texto + " " + assunto)
         texto = _SEM_FECHAR.sub("", texto)  # "[[" sem "]]" juntaria com o próximo link e quebraria o cofre
+        # Nenhum agente tem ferramenta para agir fora do cofre: dizer que publicou é falso, e link de post é inventado.
+        if _JA_PUBLICOU.search(texto) or _LINK_DE_POST.search(texto):
+            raise Recusa("nenhum agente publica: não existe ferramenta para isso, então o post NÃO foi publicado e "
+                         "não há link dele. Diga que está pronto e que a publicação depende da aprovação de "
+                         f"{mural.HUMANO}, e tire qualquer link inventado.")
         notas = ler_cofre(self.raiz)
         quebrados = [alvo for alvo in _LINK.findall(texto) if resolver(notas, alvo.split("|")[0].split("#")[0]) is None]
         if quebrados:
@@ -301,6 +306,10 @@ class Bancada:
 
 
 _SEM_FECHAR = re.compile(r"\[\[(?![^\[\]\n]*\]\])")
+_JA_PUBLICOU = re.compile(r"\b(foi|está|esta|já|ja|post|posts|vídeo|video)\s+(publicad[oa]s?|postad[oa]s?)\b"
+                          r"|\b(publiquei|postei|publicamos|postamos)\b", re.I)
+_LINK_DE_POST = re.compile(r"https?://(www\.)?(linkedin\.com/(posts|feed/update)|instagram\.com/p/|x\.com/\w+/status|"
+                           r"twitter\.com/\w+/status|youtube\.com/watch|youtu\.be/)", re.I)
 _APROVADO = re.compile(r"\baprovad[oa]s?\b", re.I)
 _AJUSTAR = re.compile(r"\bajust(ar|e|es)\b|\bcorrig|\breprovad", re.I)
 

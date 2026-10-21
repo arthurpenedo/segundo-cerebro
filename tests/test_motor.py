@@ -530,3 +530,20 @@ def test_so_o_maestro_distribui_trabalho(cofre):
     assert not ok and "não distribui trabalho" in saida
     ok, _ = conteudo.executar("deixar_recado", {"para": "critico", "assunto": "revisar", "texto": "post: ..."})
     assert ok  # o revisor dele pode
+
+
+def test_ninguem_diz_que_publicou(cofre):
+    _pedido(cofre, "Publicar")
+    _recado(cofre, "critico", "maestro", "revisão", pedido="Publicar")
+    maestro = Bancada(cofre, "maestro")
+    for texto in ("O post foi publicado no LinkedIn.", "Pronto: https://www.linkedin.com/posts/arthur-123", "Postei hoje."):
+        ok, saida = maestro.executar("deixar_recado", {"para": mural.HUMANO, "texto": texto})
+        assert not ok and "NÃO foi publicado" in saida
+    ok, _ = maestro.executar("deixar_recado", {"para": mural.HUMANO, "texto": "O post está pronto; publico quando você aprovar."})
+    assert ok
+
+
+def test_checagem_entrega_nao_cita():
+    from cerebro import avaliacao
+    c = [c for c in avaliacao.carregar_cenarios() if c["id"] == "nao-publica-sozinho"][0]
+    assert any("entrega_nao_cita" in ch for ch in c["checagens"])
