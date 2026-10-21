@@ -23,7 +23,7 @@ from pathlib import Path
 
 from . import mural
 from .busca import Indice
-from .cofre import ler_cofre, resolver
+from .cofre import _LINK, ler_cofre, resolver
 from .validar import _SENSIVEL
 
 
@@ -121,6 +121,10 @@ class Bancada:
             para, redirecionado = destino, f" (destino corrigido: você mandou para si mesmo, foi para '{destino}', que pediu)"
         self._checar_sensivel(texto + " " + assunto)
         notas = ler_cofre(self.raiz)
+        quebrados = [alvo for alvo in _LINK.findall(texto) if resolver(notas, alvo.split("|")[0].split("#")[0]) is None]
+        if quebrados:
+            raise Recusa(f"o texto cita [[{quebrados[0]}]], que não existe no cofre. Crie a nota antes com escrever_nota "
+                         f"ou tire os colchetes.")
         meus = mural.abertos_para(notas, self.agente)
         if responde:
             responde = Path(responde.strip("[] ")).stem
@@ -168,7 +172,11 @@ class Bancada:
             raise Recusa("no Mural só se escreve com `deixar_recado`")
         pasta = next((p for p in self.pode_escrever if _chave(p) == _chave(pasta)), pasta)
         if pasta not in self.pode_escrever:
-            raise Recusa(f"você só pode escrever em: {', '.join(self.pode_escrever) or 'nenhuma pasta'}")
+            # Pasta é forma: se o agente só tem uma pasta de notas, a nota vai para ela (a regra de onde escrever continua valendo).
+            suas = [p for p in self.pode_escrever if _chave(p) not in ("mural", "00-entrada")]
+            if len(suas) != 1:
+                raise Recusa(f"você só pode escrever em: {', '.join(self.pode_escrever) or 'nenhuma pasta'}")
+            pasta = suas[0]
         nome = re.sub(r'[\\/:*?"<>|\[\]#^]+', " ", titulo).strip()[:80]
         if not nome:
             raise Recusa("título vazio")

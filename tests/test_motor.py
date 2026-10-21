@@ -49,6 +49,8 @@ def test_init_com_outro_humano_troca_a_caixa(tmp_path):
 def test_agente_so_escreve_nas_proprias_pastas(cofre):
     dev = Bancada(cofre, "dev")
     ok, saida = dev.executar("escrever_nota", {"pasta": "Conhecimento", "titulo": "X", "conteudo": "y"})
+    assert ok and (cofre / "Projetos" / "X.md").is_file() and not (cofre / "Conhecimento" / "X.md").exists()
+    ok, saida = Bancada(cofre, "maestro").executar("escrever_nota", {"pasta": "Projetos", "titulo": "X", "conteudo": "y"})
     assert not ok and "só pode escrever em" in saida
     ok, saida = dev.executar("escrever_nota", {"pasta": "Projetos", "titulo": "Status do CI", "conteudo": "verde"})
     assert ok and (cofre / "Projetos" / "Status do CI.md").is_file()
@@ -370,3 +372,13 @@ def test_mural_mostra_o_proximo_passo(cofre):
     resposta = mural.escrever_recado(cofre, "dev", "maestro", "CI verde", "verde", responde=pedido).stem
     texto = Bancada(cofre, "maestro").ler_mural()
     assert "Entregue a arthur" in texto and f'responde="{resposta}"' in texto
+
+
+def test_nota_vai_para_a_unica_pasta_do_agente_e_link_quebrado_e_recusado(cofre):
+    b = Bancada(cofre, "pesquisador")
+    ok, saida = b.executar("escrever_nota", {"pasta": "pesquisador", "titulo": "MCP", "conteudo": "tomada padrão"})
+    assert ok and (cofre / "Conhecimento" / "MCP.md").is_file()
+    ok, saida = b.executar("deixar_recado", {"para": "maestro", "assunto": "pronto", "texto": "veja [[Nota que nao existe]]"})
+    assert not ok and "não existe" in saida
+    ok, _ = b.executar("deixar_recado", {"para": "maestro", "assunto": "pronto", "texto": "veja [[MCP]]"})
+    assert ok

@@ -60,7 +60,9 @@ PROTOCOLO_AGENTE = """Como você trabalha:
 1. Para cada recado aberto para você: faça o trabalho pedido (se gerar conteúdo, salve com escrever_nota numa pasta sua).
 2. Responda a quem pediu com deixar_recado (para = quem escreveu o recado, responde = nome do recado), com o
    resultado e o link [[...]] da nota. Responder já resolve o recado recebido.
-3. Nunca mande recado para você mesmo. Só termine quando não houver recado aberto para você."""
+3. Nunca mande recado para você mesmo. Só termine quando não houver recado aberto para você.
+4. Revisão (crítico): responda "aprovado" ou "ajustar: <o quê>" uma única vez. Quem recebe "aprovado" entrega o
+   resultado final ao maestro, e não ao crítico de novo. Ajustes: corrija uma vez e entregue ao maestro."""
 
 TRADUCAO = ("Sua nota cita comandos de terminal; aqui você usa ferramentas: `cerebro mural` = ler_mural, "
             "`cerebro recado` = deixar_recado, `cerebro fechar` = fechar_recado, `cerebro validar` = não precisa.")
