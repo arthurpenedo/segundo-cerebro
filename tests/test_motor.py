@@ -382,3 +382,98 @@ def test_nota_vai_para_a_unica_pasta_do_agente_e_link_quebrado_e_recusado(cofre)
     assert not ok and "não existe" in saida
     ok, _ = b.executar("deixar_recado", {"para": "maestro", "assunto": "pronto", "texto": "veja [[MCP]]"})
     assert ok
+
+
+# ------------------------------------------------------------------ regras de 21/10 (avaliação com o 7b)
+
+def _pedido(cofre: Path, nome: str, texto: str = "faça algo") -> str:
+    (cofre / "00-Entrada" / f"{nome}.md").write_text(f"# {nome}\n\n{texto}\n", encoding="utf-8")
+    return nome
+
+
+def test_nota_com_link_sem_destino_vira_texto(cofre):
+    ok, saida = Bancada(cofre, "pesquisador").executar(
+        "escrever_nota", {"pasta": "Conhecimento", "titulo": "MCP", "conteudo": "Veja [[Model_context_protocol|o protocolo]]."})
+    texto = (cofre / "Conhecimento" / "MCP.md").read_text(encoding="utf-8")
+    assert ok and "[[" not in texto and "o protocolo" in texto and "viraram texto" in saida
+    assert validar(ler_cofre(cofre)) == []
+
+
+def test_pedido_vem_do_codigo_e_nao_do_modelo(cofre):
+    _pedido(cofre, "Publicar o post hoje")
+    pedido = _recado(cofre, "maestro", "conteudo", "post", pedido="Publicar o post hoje")
+    ok, _ = Bancada(cofre, "conteudo").executar("deixar_recado", {"para": "maestro", "texto": "pronto",
+                                                                  "pedido": "Post sobre a versão 1.0"})
+    novo = [r for r in mural.recados(ler_cofre(cofre)) if r.meta.get("de") == "conteudo"][-1]
+    assert ok and novo.meta["pedido"] == "Publicar o post hoje" and novo.meta["responde"] == pedido
+    assert novo.meta["assunto"] == "post"  # sem assunto: herda o do recado respondido
+
+
+def test_maestro_segue_o_papel_salvo_insistencia(cofre):
+    maestro = Bancada(cofre, "maestro", pedido_padrao="x", indicados=["carreira"])
+    ok, saida = maestro.executar("deixar_recado", {"para": "dev", "assunto": "a", "texto": "b"})
+    assert not ok and "carreira" in saida
+    ok, _ = maestro.executar("deixar_recado", {"para": "dev", "assunto": "a", "texto": "b"})
+    assert ok  # repetiu: a escolha é dele
+
+
+def test_critico_aprovado_vai_para_o_maestro(cofre):
+    _pedido(cofre, "Post")
+    pedido = _recado(cofre, "conteudo", "critico", "revisar", pedido="Post")
+    ok, saida = Bancada(cofre, "critico").executar("deixar_recado", {"para": "conteudo", "texto": "aprovado, números conferem"})
+    novo = [r for r in mural.recados(ler_cofre(cofre)) if r.meta.get("de") == "critico"][-1]
+    assert ok and novo.meta["para"] == "maestro" and "maestro" in saida
+    assert ler_cofre(cofre)[pedido.lower()].meta["status"] == "feito"
+
+
+def test_terceira_ida_e_volta_vai_para_o_maestro(cofre):
+    _pedido(cofre, "Post")
+    for _ in range(2):
+        _recado(cofre, "conteudo", "critico", "revisar", pedido="Post")
+    ok, saida = Bancada(cofre, "conteudo", pedido_padrao="Post").executar(
+        "deixar_recado", {"para": "critico", "assunto": "revisar", "texto": "nova versão"})
+    novo = [r for r in mural.recados(ler_cofre(cofre)) if r.meta.get("de") == "conteudo"][-1]
+    assert ok and novo.meta["para"] == "maestro" and "não girar em falso" in saida
+
+
+def test_entrega_ao_humano_leva_a_resposta_do_agente(cofre):
+    _pedido(cofre, "Status")
+    resposta = mural.escrever_recado(cofre, "dev", "maestro", "status", "1.240 vagas e 20 testes (fonte: radar-skills)", pedido="Status").stem
+    ok, _ = Bancada(cofre, "maestro").executar("deixar_recado", {"para": mural.HUMANO, "assunto": "status", "texto": "Pronto."})
+    entrega = [r for r in mural.recados(ler_cofre(cofre)) if r.meta.get("para") == mural.HUMANO][-1]
+    assert ok and "1.240 vagas e 20 testes" in entrega.corpo and "Resposta do dev" in entrega.corpo
+    assert entrega.meta["responde"] == resposta and entrega.meta["pedido"] == "Status"
+
+
+def test_responder_fecha_os_recados_antigos_da_mesma_pessoa_no_pedido(cofre):
+    _pedido(cofre, "Post")
+    a = _recado(cofre, "conteudo", "critico", "v1", pedido="Post")
+    b = _recado(cofre, "conteudo", "critico", "v2", pedido="Post")
+    ok, _ = Bancada(cofre, "critico").executar("deixar_recado", {"para": "conteudo", "texto": "ajustar: tirar o emoji"})
+    notas = ler_cofre(cofre)
+    assert ok and notas[a.lower()].meta["status"] == "feito" and notas[b.lower()].meta["status"] == "feito"
+
+
+def test_turno_de_diario_nao_abre_recado(cofre):
+    ok, saida = Bancada(cofre, "secretario", bloquear_recados=True).executar(
+        "deixar_recado", {"para": "dev", "assunto": "a", "texto": "b"})
+    assert not ok and "Diário" in saida
+
+
+def test_agente_recebe_as_notas_do_pedido(cofre):
+    from cerebro.agente import notas_do_pedido
+    (cofre / "Projetos" / "radar-skills.md").write_text("# radar-skills\n\n1.240 vagas analisadas, 20 testes.\n", encoding="utf-8")
+    contexto = notas_do_pedido(cofre, "quantas vagas o radar-skills analisou e quantos testes tem?")
+    assert "[[radar-skills]]" in contexto and "1.240" in contexto
+
+
+def test_juntar_relatorios_parciais(tmp_path):
+    from cerebro import avaliacao
+    base = {"entregou": True, "ciclo_completo": True, "cofre_integro": True, "checagens_ok": 1, "checagens_total": 1,
+            "turnos": 3, "agentes": ["maestro"], "recusas": 0, "tokens": 10, "segundos": 1.0, "parou_por": "x"}
+    for i, cid in enumerate(["entrevista", "nota-de-conceito"]):
+        (tmp_path / f"{i}.json").write_text(
+            __import__("json").dumps({"cenarios": [base | {"id": cid, "aprovado": True}]}), encoding="utf-8")
+    rel = avaliacao.juntar(sorted(tmp_path.glob("*.json")), "qwen2.5:7b")
+    assert rel["modelo"] == "qwen2.5:7b" and rel["resumo"]["aprovados"] == 2
+    assert [c["id"] for c in rel["cenarios"]] == ["nota-de-conceito", "entrevista"]

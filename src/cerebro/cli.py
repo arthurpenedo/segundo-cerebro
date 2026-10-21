@@ -94,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--saida", default="resultados/avaliacao.json")
     p.add_argument("--cenario", action="append", help="rodar só estes cenários (id); pode repetir")
     p.add_argument("--max-turnos", type=int, default=14)
+    p.add_argument("--juntar", nargs="+", help="só junta relatórios parciais (um por cenário) em --saida")
     _opcoes_motor(p, padrao="ollama")
     sub.add_parser("mcp", help="servidor MCP (stdio) para o Claude Desktop/Code ler e escrever no cofre")
     p = sub.add_parser("init", help="cria um cofre novo com os 9 agentes, pronto para abrir no Obsidian")
@@ -144,8 +145,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.comando == "avaliar":
         from . import avaliacao
 
-        cenarios = [c for c in avaliacao.carregar_cenarios() if not args.cenario or c["id"] in args.cenario]
-        relatorio = avaliacao.avaliar(_cliente(args, args.modelo), cenarios, args.max_turnos, parcial=raiz / args.saida)
+        if args.juntar:
+            relatorio = avaliacao.juntar(args.juntar, args.modelo)
+        else:
+            cenarios = [c for c in avaliacao.carregar_cenarios() if not args.cenario or c["id"] in args.cenario]
+            relatorio = avaliacao.avaliar(_cliente(args, args.modelo), cenarios, args.max_turnos,
+                                          parcial=raiz / args.saida)
         destino = avaliacao.salvar(relatorio, raiz / args.saida)
         r = relatorio["resumo"]
         print(f"{r['aprovados']}/{r['cenarios']} cenários aprovados · entregou {r['entregou']:.0%} · "

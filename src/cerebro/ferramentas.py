@@ -46,9 +46,12 @@ class Bancada:
     raiz: Path
     agente: str
     registros: list[Registro] = field(default_factory=list)
-    pedido_padrao: str | None = None  # pedido da Entrada que acordou o agente: entra nos recados que não disserem outro
+    pedido_padrao: str | None = None  # pedido do turno (da Entrada ou do recado que acordou o agente)
+    indicados: list[str] = field(default_factory=list)  # agentes que o papel indica para um pedido novo (maestro)
+    bloquear_recados: bool = False  # turno só de Diário: não abre recado novo
 
     def __post_init__(self) -> None:
+        self._insistiu: set[str] = set()
         self.raiz = Path(self.raiz)
         self.agente = self.agente.lower()
         notas = ler_cofre(self.raiz)
@@ -99,12 +102,16 @@ class Bancada:
         nomes = sorted(n.nome for n in ler_cofre(self.raiz).values() if n.pasta.lower() == pasta.lower())
         return "\n".join(nomes) if nomes else f"A pasta '{pasta}' não tem notas."
 
-    def deixar_recado(self, para: str, assunto: str, texto: str, responde: str | None = None,
+    def deixar_recado(self, para: str, assunto: str = "", texto: str = "", responde: str | None = None,
                       pedido: str | None = None) -> str:
         """Escreve um recado no Mural. O remetente é sempre você."""
+        if self.bloquear_recados:
+            raise Recusa("agora é só o Diário: a Entrada já foi encaminhada e não há recado novo a abrir.")
         para = para.lower().strip().strip("`@ ")
         if para not in self.conhecidos:
             raise Recusa(f"'{para}' não é um agente do cofre. Agentes: {', '.join(sorted(self.conhecidos))}")
+        if not str(texto).strip():
+            raise Recusa("o recado está sem texto: escreva em `texto` o resultado ou o pedido")
         redirecionado = ""
         if para == self.agente:
             # Recado para si mesmo é engano de endereço: se dá para saber a quem ele responde, corrige o destino.
@@ -134,21 +141,66 @@ class Bancada:
                 except (FileNotFoundError, ValueError):
                     raise Recusa(f"o recado '{responde}' não existe; use o nome exato que aparece em ler_mural") from None
         else:
-            # Esqueceu de dizer a qual recado responde: se só há um recado aberto deste destinatário para mim, é ele.
+            # Esqueceu de dizer a qual recado responde: é o mais recente aberto deste destinatário para mim.
             do_destinatario = [r for r in meus if str(r.meta.get("de", "")).lower() == para]
-            if len(do_destinatario) == 1:
-                responde = do_destinatario[0].nome
+            if self.agente == "maestro" and para == mural.HUMANO:
+                # Entrega ao humano responde ao resultado que um agente trouxe (do pedido do turno, se houver).
+                do_destinatario = [r for r in meus if str(r.meta.get("de", "")).lower() not in (mural.HUMANO, "maestro")
+                                   and (not self.pedido_padrao
+                                        or str(r.meta.get("pedido", "")).strip("[] ") == self.pedido_padrao)]
+            if do_destinatario:
+                responde = do_destinatario[-1].nome
+        original = resolver(notas, responde) if responde else None
+
+        # O pedido vem do código, não do que o modelo escreve: o do recado respondido, senão o do turno.
+        # O valor que o modelo passa só vale se for o nome de um pedido da Entrada.
+        herdado = str(original.meta.get("pedido", "")).strip("[] ") if original is not None else ""
+        if herdado:
+            pedido = herdado
+        elif self.pedido_padrao:
+            pedido = self.pedido_padrao
+        elif pedido and not (self.raiz / "00-Entrada" / f"{Path(str(pedido).strip('[] ')).stem}.md").is_file():
+            pedido = None
+        if not str(assunto).strip():
+            assunto = (str(original.meta.get("assunto", "")) if original is not None else "") or pedido or "recado"
+
+        # Roteamento: o primeiro recado de um pedido novo vai para quem o papel indica, salvo insistência.
+        if (self.agente == "maestro" and self.indicados and para not in self.indicados
+                and para not in (mural.HUMANO, "critico") and para not in self._insistiu):
+            self._insistiu.add(para)
+            raise Recusa(f"pelo papel, este pedido é de {' ou '.join(self.indicados)}. Mande para um deles; se tiver "
+                          f"certeza de que é de '{para}', repita a mesma chamada.")
+        de_quem = str(original.meta.get("de", "")).lower() if original is not None else ""
+        if self.agente == "critico" and para != "maestro" and _APROVADO.search(texto) and not _AJUSTAR.search(texto):
+            # Revisão termina no maestro: "aprovado" vai direto para quem entrega ao humano.
+            para, redirecionado = "maestro", " (revisão aprovada: foi direto para o maestro, que entrega)"
+        elif pedido and para not in ("maestro", mural.HUMANO):
+            idas = [r for r in mural.recados(notas) if str(r.meta.get("pedido", "")).strip("[] ") == pedido
+                    and str(r.meta.get("de", "")).lower() == self.agente and str(r.meta.get("para", "")).lower() == para]
+            if len(idas) >= 2:
+                redirecionado = (f" (já eram {len(idas)} recados seus para '{para}' neste pedido: este foi para o "
+                                 f"maestro decidir, para a conversa não girar em falso)")
+                para = "maestro"
+        if (self.agente == "maestro" and para == mural.HUMANO and original is not None
+                and de_quem not in (mural.HUMANO, "maestro", "")):
+            # A entrega ao humano leva a resposta de quem fez o trabalho, não só o resumo do maestro.
+            texto = f"{texto.strip()}\n\n**Resposta do {de_quem}:**\n\n" + _citar(original.corpo)
+
         try:
             arquivo = mural.escrever_recado(self.raiz, self.agente, para, assunto, texto, responde=responde,
-                                            pedido=pedido or (None if responde else self.pedido_padrao))
+                                            pedido=pedido)
         except mural.RecadoRecusado as e:
             raise Recusa(str(e)) from e
-        # Responder resolve: o recado que eu recebi e acabei de responder sai da minha fila.
-        resolvido = next((r for r in meus if responde and r.nome.lower() == responde.lower()), None)
-        if resolvido is not None:
-            mural.mudar_status(self.raiz / resolvido.caminho, "feito")
-            return (f"Recado criado: {arquivo.stem}{redirecionado}. O recado que você respondeu ({resolvido.nome}) "
-                    f"foi marcado como resolvido.")
+        # Responder resolve: o recado respondido sai da minha fila, e com ele os mais antigos da mesma pessoa
+        # neste pedido (a resposta vale para a conversa toda).
+        resolvidos = [r for r in meus if original is not None and (
+            r.nome.lower() == original.nome.lower()
+            or (str(r.meta.get("de", "")).lower() == de_quem and str(r.meta.get("pedido", "")).strip("[] ") == (herdado or "-")))]
+        for r in resolvidos:
+            mural.mudar_status(self.raiz / r.caminho, "feito")
+        if resolvidos:
+            return (f"Recado criado: {arquivo.stem}{redirecionado}. Marcado como resolvido: "
+                    f"{', '.join(r.nome for r in resolvidos)}.")
         return f"Recado criado: {arquivo.stem}{redirecionado}"
 
     def fechar_recado(self, nome: str, status: str = "feito") -> str:
@@ -181,11 +233,24 @@ class Bancada:
         if not nome:
             raise Recusa("título vazio")
         self._checar_sensivel(conteudo)
+        # Link para nota que não existe quebraria o cofre: vira texto simples, e o agente fica sabendo.
+        notas = ler_cofre(self.raiz)
+        sem_destino: list[str] = []
+
+        def _trocar(m: re.Match) -> str:
+            alvo = m.group(1).strip()
+            if resolver(notas, alvo) is not None or alvo.lower() == nome.lower():
+                return m.group(0)
+            sem_destino.append(alvo)
+            rotulo = m.group(0)[2:-2].split("|")[-1] if "|" in m.group(0) else alvo
+            return rotulo
+        conteudo = _LINK.sub(_trocar, conteudo)
         destino = self.raiz / pasta / f"{nome}.md"
         destino.parent.mkdir(parents=True, exist_ok=True)
         corpo = conteudo if conteudo.lstrip().startswith(("#", "---")) else f"# {nome}\n\n{conteudo.strip()}\n"
         destino.write_text(corpo, encoding="utf-8")
-        return f"Nota salva: {pasta}/{nome}.md (link: [[{nome}]])"
+        aviso = (f" Links sem nota no cofre viraram texto: {', '.join(sem_destino[:5])}." if sem_destino else "")
+        return f"Nota salva: {pasta}/{nome}.md (link: [[{nome}]]).{aviso}"
 
     # ---------------------------------------------------------------- execução e esquema
 
@@ -207,6 +272,19 @@ class Bancada:
             resultado, ok = f"ERRO nos argumentos: {e}", False
         self.registros.append(Registro(nome, argumentos or {}, ok, resultado[:500]))
         return ok, resultado
+
+
+_APROVADO = re.compile(r"\baprovad[oa]s?\b", re.I)
+_AJUSTAR = re.compile(r"\bajust(ar|e|es)\b|\bcorrig|\breprovad", re.I)
+
+
+def _citar(corpo: str, limite: int = 1500) -> str:
+    """Corpo de um recado como citação: sem o título e sem a linha "Em resposta a"."""
+    linhas = [li for li in corpo.strip().splitlines() if not li.startswith("Em resposta a [[")]
+    if linhas and linhas[0].startswith("# "):
+        linhas = linhas[1:]
+    texto = "\n".join(linhas).strip()[:limite]
+    return "\n".join(f"> {li}" if li.strip() else ">" for li in texto.splitlines())
 
 
 def _chave(texto: str) -> str:

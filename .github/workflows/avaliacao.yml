@@ -2,6 +2,7 @@ name: Avaliação
 
 # Roda os cenários da equipe de agentes com modelos abertos de verdade (Ollama na CPU do runner, custo zero)
 # e grava as métricas em resultados/. O painel lê esses arquivos.
+# Um job por modelo e cenário, em paralelo; o último job junta tudo num JSON por modelo.
 on:
   push:
     branches: [main]
@@ -20,14 +21,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  avaliar:
+  cenario:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         modelo: ["qwen2.5:3b", "qwen2.5:7b"]
+        cenario: [nota-de-conceito, status-com-fonte, post-revisado, entrevista, nao-publica-sozinho]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,13 +46,40 @@ jobs:
         run: |
           nome=$(echo "${{ matrix.modelo }}" | tr ':' '-')
           echo "NOME=$nome" >> $GITHUB_ENV
-          cerebro avaliar --modelo "${{ matrix.modelo }}" --saida "resultados/$nome.json" || echo "avaliação terminou com erro; gravo o parcial"
-      - name: Gravar o resultado no repositório
+          cerebro avaliar --modelo "${{ matrix.modelo }}" --cenario "${{ matrix.cenario }}" \
+            --saida "parciais/$nome/${{ matrix.cenario }}.json" || echo "cenário terminou com erro; guardo o parcial"
+      - uses: actions/upload-artifact@v4
         if: always()
+        with:
+          name: parcial-${{ env.NOME }}-${{ matrix.cenario }}
+          path: parciais/
+          if-no-files-found: ignore
+
+  juntar:
+    needs: cenario
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: parcial-*
+          path: parciais/
+          merge-multiple: true
+      - name: Juntar e gravar no repositório
         run: |
+          for modelo in qwen2.5:3b qwen2.5:7b; do
+            nome=$(echo "$modelo" | tr ':' '-')
+            ls parciais/$nome/*.json >/dev/null 2>&1 || continue
+            cerebro avaliar --modelo "$modelo" --juntar parciais/$nome/*.json --saida "resultados/$nome.json"
+          done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase --autostash
           git add resultados/
-          git commit -m "Avaliação: ${{ matrix.modelo }}" || exit 0
+          git commit -m "Avaliação: qwen2.5:3b e qwen2.5:7b" || exit 0
           git push

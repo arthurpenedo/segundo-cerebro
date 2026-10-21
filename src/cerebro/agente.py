@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field, replace
+from datetime import date
 from pathlib import Path
 
 from .cofre import ler_cofre
@@ -61,8 +62,10 @@ PROTOCOLO_AGENTE = """Como você trabalha:
 2. Responda a quem pediu com deixar_recado (para = quem escreveu o recado, responde = nome do recado), com o
    resultado e o link [[...]] da nota. Responder já resolve o recado recebido.
 3. Nunca mande recado para você mesmo. Só termine quando não houver recado aberto para você.
-4. Revisão (crítico): responda "aprovado" ou "ajustar: <o quê>" uma única vez. Quem recebe "aprovado" entrega o
-   resultado final ao maestro, e não ao crítico de novo. Ajustes: corrija uma vez e entregue ao maestro."""
+4. Revisão (crítico): responda "aprovado" ou "ajustar: <o quê>" uma única vez. "aprovado" vai direto para o maestro
+   (o sistema encaminha). Quem recebe "ajustar" corrige uma vez e devolve ao crítico.
+5. Números e fatos: copie da nota do cofre que é a fonte (veja "Notas do cofre ligadas a este pedido") e cite a nota.
+   Nunca invente um número."""
 
 TRADUCAO = ("Sua nota cita comandos de terminal; aqui você usa ferramentas: `cerebro mural` = ler_mural, "
             "`cerebro recado` = deixar_recado, `cerebro fechar` = fechar_recado, `cerebro validar` = não precisa.")
@@ -76,13 +79,26 @@ def instrucao_de_sistema(raiz: Path, agente: str) -> str:
     pastas = ", ".join(str(p) for p in ficha.meta.get("escreve_em") or [])
     lista = "\n".join(f"- {i}: {a.meta.get('papel', '')}" for i, a in sorted(equipe.items()))
     protocolo = PROTOCOLO_MAESTRO if agente == "maestro" else PROTOCOLO_AGENTE
-    return (f"{REGRAS}\n\nVocê é o agente `{agente}` ({ficha.meta.get('nome', agente)}). Pode escrever em: {pastas}.\n\n"
+    return (f"{REGRAS}\n\nHoje é {date.today().isoformat()}.\n\nVocê é o agente `{agente}` ({ficha.meta.get('nome', agente)}). Pode escrever em: {pastas}.\n\n"
             f"Equipe (id: papel):\n{lista}\n\n{protocolo}\n\n{TRADUCAO}\n\n"
             f"Sua nota no cofre (papel e regras):\n\n{ficha.corpo.strip()}")
 
 
 def _abertos_meus(raiz: Path, agente: str) -> set[str]:
     return {r.nome for r in abertos_para(ler_cofre(raiz), agente)}
+
+
+def notas_do_pedido(raiz: Path, consulta: str, limite: int = 3, tamanho: int = 700) -> str:
+    """As notas de conhecimento do cofre mais ligadas ao pedido, com o começo do texto (para o agente não inventar)."""
+    from .busca import Indice
+
+    fora = {"mural", "agentes", "00-entrada", "diario"}
+    notas = {k: n for k, n in ler_cofre(raiz).items() if n.pasta.lower() not in fora and n.tipo != "recado"}
+    achados = [r for r in Indice(notas).buscar(consulta, limite=limite) if r.pontos > 0] if consulta.strip() else []
+    if not achados:
+        return ""
+    partes = [f"### [[{r.nota.nome}]] ({r.nota.pasta or 'raiz'})\n{r.nota.corpo.strip()[:tamanho]}" for r in achados]
+    return "Notas do cofre ligadas a este pedido (use como fonte; cite o nome da nota):\n\n" + "\n\n".join(partes)
 
 
 def sugerir_agentes(raiz: Path, pedido: str, limite: int = 2) -> list[str]:
@@ -96,14 +112,17 @@ def sugerir_agentes(raiz: Path, pedido: str, limite: int = 2) -> list[str]:
 
 
 def rodar_turno(raiz: str | Path, agente: str, motivo: str, llm: LLM, max_passos: int = 12,
-                lembretes: int = 1, pedido: str | None = None) -> ResultadoTurno:
+                lembretes: int = 1, pedido: str | None = None, contexto: str = "",
+                indicados: list[str] | None = None, bloquear_recados: bool = False) -> ResultadoTurno:
     """Roda o turno. Se o modelo parar com recados ainda abertos, o motor lembra `lembretes` vez(es)."""
     raiz, agente = Path(raiz), agente.lower()
-    bancada = Bancada(raiz, agente, pedido_padrao=pedido)
+    bancada = Bancada(raiz, agente, pedido_padrao=pedido, indicados=list(indicados or []),
+                      bloquear_recados=bloquear_recados)
     no_inicio = _abertos_meus(raiz, agente)
     mensagens = [
         {"role": "system", "content": instrucao_de_sistema(raiz, agente)},
-        {"role": "user", "content": f"Você foi acordado: {motivo}.\n\nRecados abertos para você agora:\n\n{bancada.ler_mural()}"},
+        {"role": "user", "content": f"Você foi acordado: {motivo}.\n\nRecados abertos para você agora:\n\n{bancada.ler_mural()}"
+                                    + (f"\n\n{contexto}" if contexto else "")},
     ]
     ferramentas = esquema_openai()
     resultado = ResultadoTurno(agente, "", 0)

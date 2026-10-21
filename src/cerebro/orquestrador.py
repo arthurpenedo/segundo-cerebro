@@ -72,6 +72,9 @@ def _entrada_pendente(notas: dict[str, Nota]) -> list[Nota]:
     return [n for n in notas.values() if n.pasta == "00-Entrada" and n.tipo != "guia" and not n.meta.get("status")]
 
 
+FIM_DO_CICLO = "fim do ciclo: "
+
+
 def proximo(notas: dict[str, Nota], ja_viu_entrada: set[str]) -> tuple[str, str] | None:
     """(agente, motivo) de quem deve agir agora, ou None se o ciclo acabou."""
     for r in _abertos(notas):
@@ -138,20 +141,31 @@ class ExecutorLLM:
         self.llm, self.max_passos, self.ultimo = llm, max_passos, None
 
     def __call__(self, agente: str, texto: str, raiz: Path) -> str:
-        from .agente import rodar_turno, sugerir_agentes
+        from .agente import notas_do_pedido, rodar_turno, sugerir_agentes
+        raiz = Path(raiz)
         m = re.search(r"segundo-cerebro \((.*?)\)\. ", texto, re.S)
         motivo = m.group(1) if m else texto
-        pedido = None
+        pedido, indicados, consulta = None, [], ""
         if motivo.startswith(ENTRADA):
             nome = motivo[len(ENTRADA):]
-            arquivo = Path(raiz) / "00-Entrada" / f"{nome}.md"
+            arquivo = raiz / "00-Entrada" / f"{nome}.md"
             texto_pedido = arquivo.read_text(encoding="utf-8").strip() if arquivo.is_file() else ""
-            pedido = nome
-            sugestao = ", ".join(sugerir_agentes(Path(raiz), texto_pedido or nome)) or "veja a lista da equipe"
+            pedido, consulta = nome, texto_pedido or nome
+            indicados = sugerir_agentes(raiz, consulta)
+            sugestao = " (alternativa: ".join(indicados) + (")" if len(indicados) > 1 else "") or "veja a lista da equipe"
             motivo += (f'. É um pedido novo do humano. Em todo recado que abrir para ele, passe pedido="{nome}". '
-                       f"Pelo papel, quem mais combina com este pedido: {sugestao} (sugestão do sistema; a escolha é sua). "
-                       f"Texto do pedido:\n\n{texto_pedido}")
-        self.ultimo = rodar_turno(raiz, agente, motivo, self.llm, self.max_passos, pedido=pedido)
+                       f"Agente indicado pelo papel: {sugestao}. Texto do pedido:\n\n{texto_pedido}")
+        elif motivo.startswith("recado aberto: "):
+            # O pedido do turno é o do recado que acordou o agente; a busca usa o texto do pedido original.
+            recado = ler_cofre(raiz).get(motivo[len("recado aberto: "):].strip().lower())
+            if recado is not None:
+                pedido = str(recado.meta.get("pedido", "")).strip("[] ") or None
+                original = raiz / "00-Entrada" / f"{pedido}.md" if pedido else None
+                consulta = (original.read_text(encoding="utf-8") if original and original.is_file() else "") + "\n" + recado.corpo
+        contexto = notas_do_pedido(raiz, consulta) if consulta and agente != "maestro" else ""
+        bloquear = agente == "secretario" and motivo.startswith(FIM_DO_CICLO)
+        self.ultimo = rodar_turno(raiz, agente, motivo, self.llm, self.max_passos, pedido=pedido, contexto=contexto,
+                                  indicados=indicados, bloquear_recados=bloquear)
         return self.ultimo.resposta
 
 
@@ -197,7 +211,7 @@ def rodar(raiz: str | Path, executor: Executor, max_turnos: int = 15,
     if trabalhou and diario and execucao.parou_por == CICLO_COMPLETO:
         aviso("[fim] secretario ← escrever o diário do ciclo")
         inicio = time.perf_counter()
-        saida = executor("secretario", instrucao("secretario", "fim do ciclo: escreva/atualize o Diário de hoje e processe a Entrada"), raiz)
+        saida = executor("secretario", instrucao("secretario", FIM_DO_CICLO + "escreva/atualize o Diário de hoje (a Entrada já foi encaminhada)"), raiz)
         turno = Turno("secretario", "diário do ciclo", 0, 0, saida, time.perf_counter() - inicio)
         _anotar_motor(turno, executor)
         execucao.turnos.append(turno)

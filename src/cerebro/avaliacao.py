@@ -141,6 +141,17 @@ def _relatorio(llm: LLM, resultados: list[ResultadoCenario]) -> dict:
     }
 
 
+def juntar(arquivos: list[str | Path], modelo: str) -> dict:
+    """Junta os relatórios de cenários rodados em paralelo (um job do CI por cenário) num relatório só."""
+    campos = set(ResultadoCenario.__dataclass_fields__)
+    resultados, ordem = {}, [c["id"] for c in carregar_cenarios()]
+    for arquivo in arquivos:
+        for c in json.loads(Path(arquivo).read_text(encoding="utf-8")).get("cenarios", []):
+            resultados[c["id"]] = ResultadoCenario(**{k: v for k, v in c.items() if k in campos})
+    lista = sorted(resultados.values(), key=lambda r: ordem.index(r.id) if r.id in ordem else len(ordem))
+    return _relatorio(type("Modelo", (), {"nome": modelo})(), lista)
+
+
 def salvar(relatorio: dict, destino: str | Path) -> Path:
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
