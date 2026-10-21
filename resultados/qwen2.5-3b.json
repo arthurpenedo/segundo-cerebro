@@ -1,5 +1,6 @@
 {
  "modelo": "qwen2.5:3b",
+<<<<<<< Updated upstream
  "data": "2026-10-21T14:52",
  "resumo": {
   "cenarios": 4,
@@ -12,14 +13,32 @@
   "recusas_total": 5,
   "tokens_total": 166591,
   "segundos_total": 913.7
+=======
+ "data": "2026-10-21T15:08",
+ "resumo": {
+  "cenarios": 5,
+  "aprovados": 0,
+  "entregou": 0.4,
+  "ciclo_completo": 0.6,
+  "cofre_integro": 1.0,
+  "checagens": 0.615,
+  "turnos_medio": 4.0,
+  "recusas_total": 4,
+  "tokens_total": 169957,
+  "segundos_total": 1723.9
+>>>>>>> Stashed changes
  },
  "cenarios": [
   {
    "id": "nota-de-conceito",
-   "entregou": true,
+   "entregou": false,
    "ciclo_completo": true,
    "cofre_integro": true,
+<<<<<<< Updated upstream
    "checagens_ok": 3,
+=======
+   "checagens_ok": 2,
+>>>>>>> Stashed changes
    "checagens_total": 3,
    "turnos": 4,
    "agentes": [
@@ -28,6 +47,7 @@
     "maestro",
     "secretario"
    ],
+<<<<<<< Updated upstream
    "recusas": 1,
    "tokens": 26620,
    "segundos": 109.4,
@@ -39,8 +59,49 @@
     "pesquisador: ler_mural(); escrever_nota(Conhecimento) (Nota sobre MCP); deixar_recado(maestro)",
     "maestro: deixar_recado(arthur); fechar_recado(2026-10-21 pesquisador para maestro nota-sobre-mcp) → Todos os recados pertinentes foram tratados.",
     "secretario: ler_mural(); escrever_nota(Diario) (Início do Dia) → Diário de hoje:\n\n- Começo do dia: [[Início do Dia]]\n\nVou aguardar novos recados para encaminhar ou escrever."
+=======
+   "recusas": 2,
+   "tokens": 29446,
+   "segundos": 315.6,
+   "parou_por": "nenhum recado aberto para agentes",
+   "entrega": "",
+   "problemas": [],
+   "trilha": [
+    "maestro: deixar_recado(pesquisador) (Nota sobre MCP); fechar_recado(nota-sobre-mcp) RECUSADO: este recado é para 'pesquisador', não para você: só quem recebe pode fechar → Ao pesquisador foi enviado o recado para criar a nota sobre MCP. Agora, como maestro, vou aguardar a nota ser criada ant",
+    "pesquisador: ler_mural(); escrever_nota(Conhecimento) (Nota sobre MCP); deixar_recado(maestro)",
+    "maestro: ler_nota(nota-sobre-mcp) RECUSADO: não existe nota chamada 'nota-sobre-mcp'. Use `buscar` para achar o nome certo.; buscar(nota-sobre-mcp); fechar_recado(2026-10-21 pesquisador para maestro nota-sobre-mcp) → Hoje é 2026-10-21. O recado de [[2026-10-21 pesquisador para maestro nota-sobre-mcp]] foi respondido como \"feito\". Vou e",
+    "secretario: ler_mural(); escrever_nota(Diario) (Início do Dia) → Início do Dia: Começo o Diário do dia, sem recados abertos para mim."
    ],
-   "aprovado": true
+   "aprovado": false
+  },
+  {
+   "id": "status-com-fonte",
+   "entregou": true,
+   "ciclo_completo": true,
+   "cofre_integro": true,
+   "checagens_ok": 2,
+   "checagens_total": 3,
+   "turnos": 4,
+   "agentes": [
+    "maestro",
+    "dev",
+    "maestro",
+    "secretario"
+   ],
+   "recusas": 0,
+   "tokens": 35335,
+   "segundos": 298.4,
+   "parou_por": "nenhum recado aberto para agentes",
+   "entrega": "# Status do radar-skills\n\nEntreguei o resultado do dev para o arthur. Fechei o recado.\n\n**Resposta do dev:**\n\n> Resolvi gerar o status do radar-skills com base no último relatório. Fechei o recado que tratou.\n\nEm resposta a [[2026-10-21 dev para maestro status-do-radar-skills]].",
+   "problemas": [],
+   "trilha": [
+    "maestro: ler_mural(); deixar_recado(dev) (Status do radar-skills) → O recado foi criado. Agora, vou esperar pelo recado do dev respondendo ao pedido.\n\nSiga aguardando pelo recado do dev. Q",
+    "dev: ler_mural(); escrever_nota(Projetos) (status-do-radar-skills); deixar_recado(maestro) → Foi gerado o status do radar-skills com base no último relatório. O recado foi fechado.",
+    "maestro: fechar_recado(2026-10-21 dev para maestro status-do-radar-skills); deixar_recado(arthur); fechar_recado(2026-10-21 dev para maestro status-do-radar-skills); fechar_recado(2026-10-21 dev para maestro status-do-radar-skills); fechar_recado(2026-10-21 dev para maestro status-do-radar-skills); fechar_recado(2026-10-21 dev para maestro status-do-radar-skills); fechar_recado(2026-10-21 dev para maestro status-do-radar-skills) → Todos os recados pertinentes foram tratados. Agora, você pode fechar o recado que tratou.",
+    "secretario: ler_mural(); escrever_nota(Diario) (Início do Dia) → Início do Dia: Começo o Diário do dia, sem recados abertos para mim."
+>>>>>>> Stashed changes
+   ],
+   "aprovado": false
   },
   {
    "id": "post-revisado",
@@ -58,10 +119,17 @@
     "critico",
     "secretario"
    ],
+<<<<<<< Updated upstream
    "recusas": 3,
    "tokens": 68721,
    "segundos": 273.2,
    "parou_por": "nenhum recado aberto para agentes",
+=======
+   "recusas": 1,
+   "tokens": 33926,
+   "segundos": 457.7,
+   "parou_por": "critico não fechou nenhum recado (parei para não girar em falso)",
+>>>>>>> Stashed changes
    "entrega": "",
    "problemas": [],
    "trilha": [
@@ -91,7 +159,11 @@
    ],
    "recusas": 1,
    "tokens": 44295,
+<<<<<<< Updated upstream
    "segundos": 212.0,
+=======
+   "segundos": 328.2,
+>>>>>>> Stashed changes
    "parou_por": "nenhum recado aberto para agentes",
    "entrega": "# Preparar entrevista de dev de IA\n\nPreparando as perguntas técnicas para a entrevista de desenvolvedor de agentes de IA. Estou criando 3 perguntas e suas respostas curta.\n\n**Resposta do dev:**\n\n> Preparando as perguntas técnicas para a entrevista de desenvolvedor de agentes de IA. Estou criando 3 perguntas e suas respostas curta. Feito.\n\nEm resposta a [[2026-10-21 dev para maestro preparar-entrevista-de-dev-de-ia]].",
    "problemas": [],
@@ -120,7 +192,11 @@
    ],
    "recusas": 0,
    "tokens": 26955,
+<<<<<<< Updated upstream
    "segundos": 319.1,
+=======
+   "segundos": 324.0,
+>>>>>>> Stashed changes
    "parou_por": "conteudo não fechou nenhum recado (parei para não girar em falso)",
    "entrega": "",
    "problemas": [],
