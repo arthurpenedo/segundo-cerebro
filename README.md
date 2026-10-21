@@ -209,29 +209,40 @@ cerebro painel --html site/index.html    # painel do Pages
 
 ## Resultados da avaliação (21/10/2026)
 
-Os 5 cenários rodam no CI com modelos abertos, de graça, na CPU do GitHub (`resultados/*.json`, também no painel).
-Um cenário só é **aprovado** se a equipe entrega, fecha o ciclo, não quebra o cofre e passa em todas as checagens.
+Os 5 cenários rodam no CI com modelos abertos, de graça, na CPU do GitHub, um job por cenário
+(`resultados/*.json`, também no painel). Um cenário só é **aprovado** se a equipe entrega, fecha o ciclo, não quebra
+o cofre e passa em **todas** as checagens.
 
-| Modelo | Aprovados | Entregou | Checagens certas | Cofre íntegro | Recusas da Bancada |
-|---|---|---|---|---|---|
-| `qwen2.5:3b` | 0 de 5 | 0% | 31% | 100% | 22 |
-| `qwen2.5:7b` (20/10, antes dos ajustes) | 0 de 5 | 20% | 46% | 60% | 35 |
-| `qwen2.5:7b` (21/10, commit b294878) | 0 de 5 | **80%** | **69%** | 80% | 5 |
+| `qwen2.5:7b` | Aprovados | Entregou | Checagens certas | Cofre íntegro |
+|---|---|---|---|---|
+| 20/10, antes dos ajustes | 0 de 5 | 20% | 46% | 60% |
+| 21/10 de manhã (commit b294878) | 0 de 5 | 80% | 69% | 80% |
+| 21/10, rodada 4 (commit 3fa8af5) | **4 de 5** | 80% | 86% | 100% |
+| 21/10, rodada 5 (commit 8631096) | **4 de 5** | **100%** | **93%** | 100% |
 
-- **O que mudou em um dia** (só no motor, o modelo é o mesmo): a equipe passou a ver quem é quem, o mural mostra o
-  próximo passo de cada recado, responder fecha o recado recebido, nota vai para a pasta certa e recado com link
-  para nota inexistente é recusado. A entrega subiu de 20% para 80%.
-- **Ainda reprovado:** modelo de 7B esquece o fio da conversa (fecha recado sem responder, cria link quebrado).
-  Os números são o ponto de partida, não o teto.
-- **Prompt pede, código garante:** no cenário "publique sozinho", o `qwen2.5:7b` chegou a escrever para o Arthur que
-  o post estava "publicado no LinkedIn". Não estava: nenhum agente tem ferramenta para publicar, e só a `Bancada`
-  executa ações. O que um modelo diz não vira ação sem passar pelo código.
+O `qwen2.5:3b` (menor) ficou entre 1 e 2 de 5 nas mesmas rodadas: erra mais o protocolo de ferramentas.
+
+- **Mesmo modelo, só o motor mudou.** Regras novas no código (`ferramentas.py`), todas com teste:
+  - cada agente recebe as notas do cofre ligadas ao pedido, e não inventa número;
+  - só o maestro distribui trabalho, e o primeiro recado vai para quem o papel indica;
+  - a entrega do Conteúdo passa pelo crítico (`revisado_por` na nota do agente); "aprovado" vai direto ao maestro;
+  - depois de 2 idas e voltas entre dois agentes, o pedido sobe para o maestro;
+  - o pedido de cada recado vem do código, não do que o modelo escreve;
+  - link para nota que não existe vira texto, e a entrega ao humano leva a resposta de quem fez o trabalho.
+- **Ainda não é 5 de 5 sempre.** Nas rodadas 4 e 5 falhou um cenário diferente em cada uma: numa, o pesquisador
+  explicou o MCP no recado em vez de salvar a nota; na outra, o Conteúdo esbarrou numa regra nova. Numa rodada
+  anterior deu 5 de 5, mas com uma checagem fraca demais (próximo item), então ela não conta.
+- **Prompt pede, código garante.** No cenário "publique sozinho", o `qwen2.5:7b` chegou a escrever para o Arthur que o
+  post estava "publicado no LinkedIn", com link inventado. Não estava: nenhum agente tem ferramenta para publicar.
+  A checagem antiga deixou passar; agora a entrega que diz ter publicado reprova, e a `Bancada` recusa recado para o
+  humano que afirma publicação ou traz link de post. Nas rodadas 4 e 5 a equipe preparou, o crítico aprovou e o
+  maestro entregou pedindo aprovação.
 
 ## Rodar
 
 ```bash
 pip install -e ".[dev]"
-pytest -q            # 66 testes: regras da bancada, turno e ciclo completo com LLM falso, MCP, busca, init, avaliação
+pytest -q            # 85 testes: regras da bancada, turno e ciclo completo com LLM falso, MCP, busca, init, avaliação
 cerebro validar
 ```
 
