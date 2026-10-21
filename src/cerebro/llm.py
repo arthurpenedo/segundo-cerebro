@@ -61,7 +61,7 @@ class ClienteOpenAI:
     modelo: str
     url_base: str = "http://localhost:11434/v1"
     chave: str | None = None
-    timeout: float = 300.0
+    timeout: float = 900.0  # 7B na CPU do CI com contexto longo passa de 5 min
     seed: int = 42
     temperatura: float = 0.0
     max_tokens: int = 1200  # corta resposta que entra em loop (modelos pequenos às vezes não param)

@@ -171,7 +171,13 @@ class Bancada:
             raise Recusa(f"pelo papel, este pedido é de {' ou '.join(self.indicados)}. Mande para um deles; se tiver "
                           f"certeza de que é de '{para}', repita a mesma chamada.")
         de_quem = str(original.meta.get("de", "")).lower() if original is not None else ""
-        if self.agente == "critico" and para != "maestro" and _APROVADO.search(texto) and not _AJUSTAR.search(texto):
+        revisor = str(self.ficha.meta.get("revisado_por") or "").lower()
+        if (revisor and revisor in self.conhecidos and para == "maestro" and pedido
+                and not self._aprovado_por(notas, revisor, pedido)):
+            # A nota do agente diz quem revisa a entrega dele: antes do maestro, passa pelo revisor.
+            para, redirecionado = revisor, (f" (sua nota pede revisão do {revisor} antes do maestro: o recado foi "
+                                            f"para o {revisor}; quando ele aprovar, segue para o maestro)")
+        elif self.agente == "critico" and para != "maestro" and _APROVADO.search(texto) and not _AJUSTAR.search(texto):
             # Revisão termina no maestro: "aprovado" vai direto para quem entrega ao humano.
             para, redirecionado = "maestro", " (revisão aprovada: foi direto para o maestro, que entrega)"
         elif pedido and para not in ("maestro", mural.HUMANO):
@@ -218,8 +224,14 @@ class Bancada:
         mural.mudar_status(arquivo, status)
         return f"{arquivo.stem}: {status}"
 
-    def escrever_nota(self, pasta: str, titulo: str, conteudo: str) -> str:
+    def escrever_nota(self, pasta: str = "", titulo: str = "", conteudo: str = "") -> str:
         """Cria ou substitui uma nota numa pasta onde você pode escrever."""
+        if not str(conteudo).strip():
+            raise Recusa("a nota está sem conteúdo: escreva o texto em `conteudo`")
+        if not str(titulo).strip():
+            # Sem título: usa o primeiro cabeçalho do texto, senão o pedido do turno.
+            m = re.search(r"^#\s+(.+)$", conteudo, re.M)
+            titulo = m.group(1) if m else (self.pedido_padrao or "")
         if _chave(pasta) == "mural":
             raise Recusa("no Mural só se escreve com `deixar_recado`")
         pasta = next((p for p in self.pode_escrever if _chave(p) == _chave(pasta)), pasta)
@@ -253,6 +265,10 @@ class Bancada:
         return f"Nota salva: {pasta}/{nome}.md (link: [[{nome}]]).{aviso}"
 
     # ---------------------------------------------------------------- execução e esquema
+
+    def _aprovado_por(self, notas: dict, revisor: str, pedido: str) -> bool:
+        return any(str(r.meta.get("de", "")).lower() == revisor and str(r.meta.get("pedido", "")).strip("[] ") == pedido
+                   and _APROVADO.search(r.corpo) and not _AJUSTAR.search(r.corpo) for r in mural.recados(notas))
 
     def _checar_sensivel(self, texto: str) -> None:
         for nome, padrao in _SENSIVEL.items():

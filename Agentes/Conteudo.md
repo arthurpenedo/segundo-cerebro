@@ -5,6 +5,7 @@ nome: Conteúdo
 papel: "Transforma o trabalho em posts de LinkedIn e roteiros para o canal de vídeos."
 le: [Projetos, Conhecimento, Mural]
 escreve_em: [Mural, Projetos]
+revisado_por: critico  # o motor manda a entrega para o crítico antes do maestro
 ---
 # Conteúdo
 

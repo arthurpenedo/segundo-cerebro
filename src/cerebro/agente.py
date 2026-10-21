@@ -154,6 +154,29 @@ def rodar_turno(raiz: str | Path, agente: str, motivo: str, llm: LLM, max_passos
     else:
         resultado.parou_no_limite = True
         resultado.resposta = f"(parei no limite de {max_passos} passos)"
+    _entregar_o_que_salvou(raiz, agente, bancada, no_inicio)
     resultado.registros = bancada.registros
     resultado.segundos = time.perf_counter() - inicio
     return resultado
+
+
+def _entregar_o_que_salvou(raiz: Path, agente: str, bancada: Bancada, no_inicio: set[str]) -> None:
+    """O agente salvou nota mas terminou sem responder: o motor responde por ele com o link do que foi salvo.
+
+    O recado diz que a entrega foi automática; a resposta passa pelas mesmas regras de `deixar_recado`.
+    """
+    salvas = [r.resultado.split("(link: ")[1].split(")")[0] for r in bancada.registros
+              if r.ferramenta == "escrever_nota" and r.ok and "(link: " in r.resultado]
+    pendentes = sorted(no_inicio & _abertos_meus(raiz, agente))
+    if not salvas or not pendentes or bancada.bloquear_recados:
+        return
+    notas = ler_cofre(raiz)
+    for nome in pendentes:
+        recado = notas.get(nome.lower())
+        de = str(recado.meta.get("de", "")).lower() if recado is not None else ""
+        if not de or de == HUMANO:
+            continue
+        bancada.executar("deixar_recado", {
+            "para": de, "responde": nome,
+            "texto": f"Pronto: {', '.join(dict.fromkeys(salvas))}. (Entrega automática do motor: o {agente} salvou a nota "
+                     f"e terminou o turno sem responder.)"})

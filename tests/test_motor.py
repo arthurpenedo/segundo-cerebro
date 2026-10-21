@@ -477,3 +477,32 @@ def test_juntar_relatorios_parciais(tmp_path):
     rel = avaliacao.juntar(sorted(tmp_path.glob("*.json")), "qwen2.5:7b")
     assert rel["modelo"] == "qwen2.5:7b" and rel["resumo"]["aprovados"] == 2
     assert [c["id"] for c in rel["cenarios"]] == ["nota-de-conceito", "entrevista"]
+
+
+def test_conteudo_passa_pelo_critico_antes_do_maestro(cofre):
+    _pedido(cofre, "Post")
+    pedido = _recado(cofre, "maestro", "conteudo", "post", pedido="Post")
+    ok, saida = Bancada(cofre, "conteudo").executar("deixar_recado", {"para": "maestro", "texto": "post pronto"})
+    novo = [r for r in mural.recados(ler_cofre(cofre)) if r.meta.get("de") == "conteudo"][-1]
+    assert ok and novo.meta["para"] == "critico" and "revisão do critico" in saida
+    assert ler_cofre(cofre)[pedido.lower()].meta["status"] == "feito"
+    Bancada(cofre, "critico").executar("deixar_recado", {"para": "conteudo", "texto": "aprovado"})
+    ok, _ = Bancada(cofre, "conteudo", pedido_padrao="Post").executar("deixar_recado", {"para": "maestro", "texto": "ok"})
+    assert [r for r in mural.recados(ler_cofre(cofre)) if r.meta.get("de") == "conteudo"][-1].meta["para"] == "maestro"
+
+
+def test_nota_sem_titulo_usa_o_cabecalho(cofre):
+    ok, saida = Bancada(cofre, "carreira").executar("escrever_nota", {"conteudo": "# Perguntas\n\n1. O que é RAG?"})
+    assert ok and (cofre / "Carreira" / "Perguntas.md").is_file()
+
+
+def test_motor_entrega_o_que_o_agente_salvou_sem_responder(cofre):
+    _pedido(cofre, "Nota MCP")
+    pedido = _recado(cofre, "maestro", "pesquisador", "nota", pedido="Nota MCP")
+    llm = RoteiroLLM([chamar("escrever_nota", pasta="Conhecimento", titulo="MCP", conteudo="MCP é..."),
+                      Resposta("terminei", []), Resposta("terminei de novo", [])])
+    rodar_turno(cofre, "pesquisador", f"recado aberto: {pedido}", llm, pedido="Nota MCP")
+    notas = ler_cofre(cofre)
+    resposta = [r for r in mural.recados(notas) if r.meta.get("de") == "pesquisador"][-1]
+    assert notas[pedido.lower()].meta["status"] == "feito" and resposta.meta["para"] == "maestro"
+    assert "[[MCP]]" in resposta.corpo and "automática" in resposta.corpo
