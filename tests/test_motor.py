@@ -506,3 +506,27 @@ def test_motor_entrega_o_que_o_agente_salvou_sem_responder(cofre):
     resposta = [r for r in mural.recados(notas) if r.meta.get("de") == "pesquisador"][-1]
     assert notas[pedido.lower()].meta["status"] == "feito" and resposta.meta["para"] == "maestro"
     assert "[[MCP]]" in resposta.corpo and "automática" in resposta.corpo
+
+
+def test_colchete_sem_fechar_nao_quebra_o_cofre(cofre):
+    _pedido(cofre, "Nota MCP")
+    _recado(cofre, "pesquisador", "maestro", "nota", pedido="Nota MCP")
+    ok, _ = Bancada(cofre, "maestro").executar("deixar_recado", {"para": mural.HUMANO, "texto": "Veja [[MCP (Machine Conc."})
+    assert ok and validar(ler_cofre(cofre)) == []
+
+
+def test_diario_de_execucao_sem_link_inventado(cofre):
+    execucao = orquestrador.Execucao()
+    execucao.turnos.append(orquestrador.Turno("secretario", "fim", 0, 0, "Atualizei o [[Diário do dia 2026-10-21]].", 1.0))
+    orquestrador._registrar(cofre, execucao)
+    assert validar(ler_cofre(cofre)) == []
+
+
+def test_so_o_maestro_distribui_trabalho(cofre):
+    _pedido(cofre, "Post")
+    _recado(cofre, "maestro", "conteudo", "post", pedido="Post")
+    conteudo = Bancada(cofre, "conteudo", pedido_padrao="Post")
+    ok, saida = conteudo.executar("deixar_recado", {"para": "carreira", "assunto": "faz pra mim", "texto": "prepare o post"})
+    assert not ok and "não distribui trabalho" in saida
+    ok, _ = conteudo.executar("deixar_recado", {"para": "critico", "assunto": "revisar", "texto": "post: ..."})
+    assert ok  # o revisor dele pode

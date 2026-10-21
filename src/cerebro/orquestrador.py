@@ -247,7 +247,9 @@ def _registrar(raiz: Path, execucao: Execucao) -> Path:
     destino.parent.mkdir(exist_ok=True)
     linhas = "\n".join(f"| {i} | {t.agente} | {t.motivo} | {t.fechados} | {t.novos} | {t.segundos:.0f} s |"
                        for i, t in enumerate(execucao.turnos, 1))
-    respostas = "\n\n".join(f"**{i}. {t.agente}:** " + " ".join(t.saida.split())[:600]
+    # A fala livre do agente é citação, não ligação: sem [[ ]] (o corte em 600 caracteres ou um nome inventado
+    # deixariam link quebrado no Diário).
+    respostas = "\n\n".join(f"**{i}. {t.agente}:** " + " ".join(t.saida.split())[:600].replace("[[", "").replace("]]", "")
                               for i, t in enumerate(execucao.turnos, 1) if t.saida)
     trilha = "\n".join(f"| {i} | {t.agente} | " + ", ".join(f"{n}{'' if ok else ' (recusado)'}" for n, ok in t.ferramentas)
                        + f" | {t.recusas} | {t.tokens} |" for i, t in enumerate(execucao.turnos, 1) if t.ferramentas)

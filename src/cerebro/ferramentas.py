@@ -127,6 +127,7 @@ class Bancada:
                 raise Recusa("você não pode deixar recado para você mesmo; mande para quem pediu o trabalho.")
             para, redirecionado = destino, f" (destino corrigido: você mandou para si mesmo, foi para '{destino}', que pediu)"
         self._checar_sensivel(texto + " " + assunto)
+        texto = _SEM_FECHAR.sub("", texto)  # "[[" sem "]]" juntaria com o próximo link e quebraria o cofre
         notas = ler_cofre(self.raiz)
         quebrados = [alvo for alvo in _LINK.findall(texto) if resolver(notas, alvo.split("|")[0].split("#")[0]) is None]
         if quebrados:
@@ -172,6 +173,15 @@ class Bancada:
                           f"certeza de que é de '{para}', repita a mesma chamada.")
         de_quem = str(original.meta.get("de", "")).lower() if original is not None else ""
         revisor = str(self.ficha.meta.get("revisado_por") or "").lower()
+        if self.agente not in ("maestro", "secretario") and para not in ("maestro", "critico", mural.HUMANO, revisor):
+            # Só o maestro distribui trabalho: os outros respondem a quem pediu, pedem revisão ou falam com o maestro.
+            quem_pediu = {str(r.meta.get("de", "")).lower() for r in mural.recados(notas)
+                          if str(r.meta.get("para", "")).lower() == self.agente
+                          and (not pedido or str(r.meta.get("pedido", "")).strip("[] ") == pedido)}
+            if para not in quem_pediu:
+                raise Recusa(f"você não distribui trabalho: o seu é fazer e responder a quem pediu "
+                             f"({', '.join(sorted(quem_pediu - {mural.HUMANO})) or 'maestro'}). Se precisar de outro "
+                             f"agente, explique ao maestro.")
         if (revisor and revisor in self.conhecidos and para == "maestro" and pedido
                 and not self._aprovado_por(notas, revisor, pedido)):
             # A nota do agente diz quem revisa a entrega dele: antes do maestro, passa pelo revisor.
@@ -256,7 +266,7 @@ class Bancada:
             sem_destino.append(alvo)
             rotulo = m.group(0)[2:-2].split("|")[-1] if "|" in m.group(0) else alvo
             return rotulo
-        conteudo = _LINK.sub(_trocar, conteudo)
+        conteudo = _LINK.sub(_trocar, _SEM_FECHAR.sub("", conteudo))
         destino = self.raiz / pasta / f"{nome}.md"
         destino.parent.mkdir(parents=True, exist_ok=True)
         corpo = conteudo if conteudo.lstrip().startswith(("#", "---")) else f"# {nome}\n\n{conteudo.strip()}\n"
@@ -290,6 +300,7 @@ class Bancada:
         return ok, resultado
 
 
+_SEM_FECHAR = re.compile(r"\[\[(?![^\[\]\n]*\]\])")
 _APROVADO = re.compile(r"\baprovad[oa]s?\b", re.I)
 _AJUSTAR = re.compile(r"\bajust(ar|e|es)\b|\bcorrig|\breprovad", re.I)
 
