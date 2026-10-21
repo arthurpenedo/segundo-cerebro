@@ -128,8 +128,9 @@ class Bancada:
             para, redirecionado = destino, f" (destino corrigido: você mandou para si mesmo, foi para '{destino}', que pediu)"
         self._checar_sensivel(texto + " " + assunto)
         texto = _SEM_FECHAR.sub("", texto)  # "[[" sem "]]" juntaria com o próximo link e quebraria o cofre
-        # Nenhum agente tem ferramenta para agir fora do cofre: dizer que publicou é falso, e link de post é inventado.
-        if _JA_PUBLICOU.search(texto) or _LINK_DE_POST.search(texto):
+        # Nenhum agente tem ferramenta para agir fora do cofre: dizer ao humano que publicou é falso, e link de post é
+        # inventado. (Só na fala para o humano: o rascunho de um post pode ter essas palavras no próprio texto.)
+        if para == mural.HUMANO and (_JA_PUBLICOU.search(texto) or _LINK_DE_POST.search(texto)):
             raise Recusa("nenhum agente publica: não existe ferramenta para isso, então o post NÃO foi publicado e "
                          "não há link dele. Diga que está pronto e que a publicação depende da aprovação de "
                          f"{mural.HUMANO}, e tire qualquer link inventado.")
@@ -205,7 +206,11 @@ class Bancada:
         if (self.agente == "maestro" and para == mural.HUMANO and original is not None
                 and de_quem not in (mural.HUMANO, "maestro", "")):
             # A entrega ao humano leva a resposta de quem fez o trabalho, não só o resumo do maestro.
-            texto = f"{texto.strip()}\n\n**Resposta do {de_quem}:**\n\n" + _citar(original.corpo)
+            if _JA_PUBLICOU.search(original.corpo) or _LINK_DE_POST.search(original.corpo):
+                # A resposta diz que algo foi publicado (ou traz link de post): não vai como fato para o humano.
+                texto = f"{texto.strip()}\n\nA resposta do {de_quem} está no recado acima; ela cita publicação, que nenhum agente faz."
+            else:
+                texto = f"{texto.strip()}\n\n**Resposta do {de_quem}:**\n\n" + _citar(original.corpo)
 
         try:
             arquivo = mural.escrever_recado(self.raiz, self.agente, para, assunto, texto, responde=responde,

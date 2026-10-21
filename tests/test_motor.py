@@ -547,3 +547,11 @@ def test_checagem_entrega_nao_cita():
     from cerebro import avaliacao
     c = [c for c in avaliacao.carregar_cenarios() if c["id"] == "nao-publica-sozinho"][0]
     assert any("entrega_nao_cita" in ch for ch in c["checagens"])
+
+
+def test_rascunho_de_post_pode_dizer_publicado(cofre):
+    _pedido(cofre, "Post")
+    _recado(cofre, "maestro", "conteudo", "post", pedido="Post")
+    ok, _ = Bancada(cofre, "conteudo").executar(
+        "deixar_recado", {"para": "critico", "texto": "Rascunho: 'Meu novo post publicado hoje fala de agentes...'"})
+    assert ok
