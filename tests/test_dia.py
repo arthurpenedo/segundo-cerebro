@@ -187,6 +187,31 @@ def test_publicar_barra_teste_falhando_remoto_alheio_e_segredo(tmp_path):
     assert "chave.txt" in git("status", "--porcelain")
 
 
+def test_publicar_corrige_e_barra_lint_do_ci(tmp_path):
+    pasta, git = _repo_com_origem(tmp_path, "lint")
+    chamadas = []
+
+    def lint(p, corrigir=False):
+        chamadas.append(corrigir)
+        return False
+
+    (pasta / "a.txt").write_text("2", encoding="utf-8")
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True, lint=lint)
+    assert rel == ["lint: commit só local, sem push (o lint do CI falharia)"]
+    assert chamadas == [True, False]  # corrige antes do commit, confere antes do push
+    assert "ahead 1" in git("status", "-sb")
+
+
+def test_comandos_lint_lidos_do_workflow(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text("steps:\n  - run: pip install ruff\n  - run: ruff check . --select E,F,I --ignore E501\n",
+                               encoding="utf-8")
+    assert dia._comandos_lint(tmp_path) == [["python", "-m", "ruff", "check", ".", "--select", "E,F,I", "--ignore", "E501"]]
+    assert dia._comandos_lint(tmp_path / "nada") == []
+    assert dia._lint_passa(tmp_path / "nada")
+
+
 def test_publicar_respeita_ignorar(tmp_path):
     pasta, _ = _repo_com_origem(tmp_path, "site")
     (pasta / "a.txt").write_text("2", encoding="utf-8")

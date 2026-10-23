@@ -257,8 +257,32 @@ def _testes_passam(pasta: Path) -> bool:
     return r.returncode == 0
 
 
+def _comandos_lint(pasta: Path) -> list[list[str]]:
+    """Os `ruff check ...` que o CI do projeto roda (lidos dos workflows), para o push não quebrar o CI."""
+    cmds = []
+    for wf in sorted((pasta / ".github" / "workflows").glob("*.y*ml")):
+        for linha in wf.read_text(encoding="utf-8", errors="ignore").splitlines():
+            m = re.search(r"\bruff\s+check\b([^#\n]*)", linha)
+            if m and (cmd := ["python", "-m", "ruff", "check", *m.group(1).split()]) not in cmds:
+                cmds.append(cmd)
+    return cmds
+
+
+def _lint_passa(pasta: Path, corrigir: bool = False) -> bool:
+    """Roda o lint do CI (com --fix quando `corrigir`). Sem lint no CI, passa."""
+    ok = True
+    for cmd in _comandos_lint(pasta):
+        try:
+            r = subprocess.run(cmd + (["--fix"] if corrigir else []), cwd=pasta, capture_output=True, text=True,
+                               encoding="utf-8", timeout=300)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+        ok = ok and r.returncode == 0
+    return ok
+
+
 def publicar_projetos(projetos: Path, hoje: date, ignorar=frozenset(), remoto: str = REMOTO_DONO,
-                      testes=_testes_passam) -> list[str]:
+                      testes=_testes_passam, lint=_lint_passa) -> list[str]:
     """Commit + push de cada projeto que a rotina alterou. Só publica se o remoto é do Arthur, os testes passam e o
     diff não tem cara de segredo. O que falha fica só local (ou nem é commitado) e aparece no relatório."""
     relatorio = []
@@ -270,6 +294,8 @@ def publicar_projetos(projetos: Path, hoje: date, ignorar=frozenset(), remoto: s
         linhas = arquivo_msg.read_text(encoding="utf-8").strip().splitlines() if arquivo_msg.exists() else []
         msg = linhas[0].strip() if linhas else f"Rotina {hoje.isoformat()}: melhorias"
         arquivo_msg.unlink(missing_ok=True)
+        if git("status", "--porcelain").stdout.strip():
+            lint(pasta, corrigir=True)  # corrige antes do commit o que o CI barraria (ex.: imports fora de ordem)
         git("add", "-A")
         if git("diff", "--cached", "--quiet").returncode == 0:
             continue
@@ -282,6 +308,8 @@ def publicar_projetos(projetos: Path, hoje: date, ignorar=frozenset(), remoto: s
             relatorio.append(f"{pasta.name}: commit só local (o remoto não é do Arthur)")
         elif not testes(pasta):
             relatorio.append(f"{pasta.name}: commit só local, sem push (testes falharam)")
+        elif not lint(pasta):
+            relatorio.append(f"{pasta.name}: commit só local, sem push (o lint do CI falharia)")
         elif git("push", "-q").returncode != 0:
             relatorio.append(f"{pasta.name}: commit só local, o push falhou")
         else:
