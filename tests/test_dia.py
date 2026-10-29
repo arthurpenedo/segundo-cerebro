@@ -252,9 +252,19 @@ def _cofre_vagas(tmp_path):
     return raiz
 
 
-def _rodada(custo, subtype="success", texto="3 enviadas."):
-    return lambda t, r, teto: {"subtype": subtype, "result": texto, "total_cost_usd": custo, "num_turns": 40,
-                               "session_id": "abc"}
+def _limite(semana, cinco="allowed"):
+    return {"type": "rate_limit_event", "rate_limit_info": {"unifiedWindows": {
+        "five_hour": {"utilization": 0.1, "status": cinco}, "seven_day": {"utilization": semana, "status": "allowed"}}}}
+
+
+def _rodada(custo, subtype="success", texto="3 enviadas.", semanas=(0.10, 0.12)):
+    def executor(t, r, teto):
+        yield {"type": "system", "session_id": "abc"}
+        for s in semanas:
+            yield _limite(s)
+        yield {"type": "result", "subtype": subtype, "result": texto, "total_cost_usd": custo, "num_turns": 40,
+               "session_id": "abc"}
+    return executor
 
 
 def test_vagas_usa_o_executor_e_registra_no_diario(tmp_path):
@@ -265,13 +275,54 @@ def test_vagas_usa_o_executor_e_registra_no_diario(tmp_path):
         recebido.update(texto=texto, teto=teto)
         return _rodada(4.0)(texto, raiz_, teto)
 
-    assert dia.rodar_vagas(raiz, executor, hoje=HOJE, levas=4).startswith("3 enviadas.")
+    saida = dia.rodar_vagas(raiz, executor, hoje=HOJE, levas=4)
+    assert saida.startswith("3 enviadas.") and "14% do uso de um dia" in saida
     texto = recebido["texto"]
     assert "até 4 levas" in texto and "list_connected_browsers" in texto and "CAPTCHA" in texto and "PARE" in texto
     assert recebido["teto"] == dia.TETO_CALIBRACAO
     diario = (raiz / "Diario" / "2026-10-09.md").read_text(encoding="utf-8")
     assert "Rotina de candidaturas" in diario and "3 enviadas." in diario
     assert dia.historico_vagas(raiz)[0]["status"] == "ok"
+
+
+def test_limite_de_30_por_cento_do_dia_em_degraus_de_1_por_cento():
+    assert dia.limite_semana(0.30) == 0.04 and dia.limite_semana(0.70) == 0.10 and dia.limite_semana(1) == 0.14
+
+
+def test_vagas_para_no_limite_do_dia_contando_a_rotina(tmp_path):
+    raiz = _cofre_vagas(tmp_path)
+    dia.marcar_uso_do_dia(raiz, HOJE, leitor=lambda: {"semana": 0.20, "cinco_horas": 0.0})
+    vistos = []
+
+    def executor(t, r, teto):
+        for s in (0.22, 0.23, 0.24, 0.30):
+            vistos.append(s)
+            yield _limite(s)
+        yield {"type": "result", "subtype": "success", "result": "não devia chegar aqui"}
+
+    saida = dia.rodar_vagas(raiz, executor, hoje=HOJE)
+    assert saida.startswith("Rodada encerrada no limite de 30%") and vistos == [0.22, 0.23, 0.24]
+    assert dia.historico_vagas(raiz)[-1]["status"] == "limite"
+
+
+def test_vagas_para_se_a_janela_de_5_horas_acabar(tmp_path):
+    raiz = _cofre_vagas(tmp_path)
+
+    def executor(t, r, teto):
+        yield _limite(0.10)
+        yield _limite(0.11, cinco="rejected")
+
+    assert "janela de 5 horas" in dia.rodar_vagas(raiz, executor, hoje=HOJE)
+
+
+def test_base_do_dia_so_grava_uma_vez(tmp_path):
+    raiz = _cofre_vagas(tmp_path)
+    dia.marcar_uso_do_dia(raiz, HOJE, leitor=lambda: {"semana": 0.20, "cinco_horas": 0.0})
+    assert dia.marcar_uso_do_dia(raiz, HOJE, leitor=lambda: {"semana": 0.50, "cinco_horas": 0.0})["semana"] == 0.20
+
+
+def test_uso_atual_le_o_evento_de_limite():
+    assert dia.uso_atual(lambda: iter([{"type": "system"}, _limite(0.18)])) == {"semana": 0.18, "cinco_horas": 0.1}
 
 
 def test_teto_sai_do_historico_e_ignora_anomalias():

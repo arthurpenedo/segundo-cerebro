@@ -13,10 +13,13 @@ O próprio assistente também escreve nela o que dá para adiantar na próxima r
 from __future__ import annotations
 
 import json
+import math
+import os
 import re
 import shutil
 import statistics
 import subprocess
+import threading
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -381,7 +384,8 @@ def instrucao_vagas(hoje: date, levas: int = 10) -> str:
         f"de marketing/WhatsApp, inventar dado (endereço, datas, experiência), mexer no perfil do LinkedIn, mandar "
         f"mensagem. Vaga que pedir isso (ou vídeo) fica pronta até onde der e entra na lista 'PARA O ARTHUR'.\n"
         f"5. Registre cada envio e cada pendência em `Vagas/Candidaturas.md` (seção do dia) e os aprendizados com "
-        f"`cerebro aprendi`. Não use git.\n"
+        f"`cerebro aprendi`, LOGO depois de cada envio: a rodada pode ser cortada a qualquer momento pelo limite "
+        f"de uso do dia. Não use git.\n"
         f"6. Responda em até 5 linhas: quantas enviadas (empresa e vaga), quantas ficaram para o Arthur e por quê."
     )
 
@@ -450,11 +454,80 @@ def _anomalia(raiz: Path, hoje: date, uso: dict, historico: list[dict], diagnost
             f"Pausada até investigar. Ferramentas: {diagnostico}")
 
 
+# Limite de uso da assinatura (pedido do Arthur, 29/10): rotina + vagas gastam no máximo LIMITE_DIA do uso de um dia.
+# O plano não tem limite diário, só a janela de 5 horas e a semana; então o "dia" é 1/7 da semana. O Claude Code informa
+# a utilização (0 a 1) nos eventos `rate_limit_event` do stream-json, em degraus de 1%, por isso o arredondamento para baixo.
+LIMITE_DIA = 0.30
+USO_BASE = "Diario/uso-base.json"
+
+
+def limite_semana(fracao_dia: float = LIMITE_DIA) -> float:
+    return math.floor(round(fracao_dia / 7 * 100, 6)) / 100
+
+
+def _janelas(evento: dict) -> dict | None:
+    if evento.get("type") != "rate_limit_event":
+        return None
+    return (evento.get("rate_limit_info") or {}).get("unifiedWindows") or None
+
+
+def _matar(proc: subprocess.Popen) -> None:
+    if os.name == "nt":  # o claude abre processos filhos (ponte do Chrome): derruba a árvore toda
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+    else:
+        proc.kill()
+
+
+def eventos_claude(cmd: list[str], cwd: Path, timeout: int):
+    """Roda `claude -p --output-format stream-json` e devolve os eventos um a um; fechar o gerador mata o processo."""
+    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            text=True, encoding="utf-8")
+    relogio = threading.Timer(timeout, _matar, [proc])
+    relogio.start()
+    try:
+        for linha in proc.stdout:
+            try:
+                yield json.loads(linha)
+            except json.JSONDecodeError:
+                continue
+    finally:
+        relogio.cancel()
+        if proc.poll() is None:
+            _matar(proc)
+        proc.wait()
+
+
+def uso_atual(executor=None) -> dict:
+    """Utilização atual da assinatura ({'semana': 0.18, 'cinco_horas': 0.06}) com uma chamada mínima ao haiku."""
+    cmd = ["claude", "-p", "Responda só: ok", "--model", "haiku", "--output-format", "stream-json", "--verbose"]
+    eventos = executor() if executor else eventos_claude(cmd, Path.cwd(), 300)
+    for ev in eventos:
+        jan = _janelas(ev)
+        if jan:
+            getattr(eventos, "close", lambda: None)()
+            return {"semana": jan["seven_day"]["utilization"], "cinco_horas": jan["five_hour"]["utilization"]}
+    raise RuntimeError("o Claude Code não informou a utilização da assinatura")
+
+
+def marcar_uso_do_dia(raiz: str | Path, hoje: date | None = None, leitor=uso_atual) -> dict:
+    """Guarda a utilização no começo do dia (antes da rotina); só a primeira chamada do dia grava."""
+    arq, hoje = Path(raiz) / USO_BASE, hoje or date.today()
+    if arq.exists():
+        base = json.loads(arq.read_text(encoding="utf-8"))
+        if base.get("data") == hoje.isoformat():
+            return base
+    base = {"data": hoje.isoformat(), **leitor()}
+    arq.parent.mkdir(exist_ok=True)
+    arq.write_text(json.dumps(base), encoding="utf-8")
+    return base
+
+
 def rodar_vagas(raiz: str | Path, executor=None, hoje: date | None = None, levas: int = 10, modelo: str = "sonnet",
                 timeout: int = 4 * 3600, pastas=()) -> str:
-    """Roda as levas de candidatura (Claude Code + Claude in Chrome, ou um executor de teste) com teto pelo histórico.
+    """Roda as levas de candidatura (Claude Code + Claude in Chrome, ou um executor de teste) com dois freios:
+    o limite de uso do dia (LIMITE_DIA, contado desde a base do dia) e o teto de anomalia pelo histórico.
 
-    O executor recebe (texto, raiz, teto) e devolve o resultado JSON do `claude -p --output-format json`.
+    O executor recebe (texto, raiz, teto) e devolve os eventos do `claude -p --output-format stream-json`.
     """
     raiz, hoje = Path(raiz), hoje or date.today()
     if not (raiz / VAGAS_ROTINA).exists():
@@ -464,33 +537,54 @@ def rodar_vagas(raiz: str | Path, executor=None, hoje: date | None = None, levas
     historico = historico_vagas(raiz)
     teto = teto_vagas(historico)
     texto = instrucao_vagas(hoje, levas)
+    arq_base = raiz / USO_BASE
+    base = json.loads(arq_base.read_text(encoding="utf-8")) if arq_base.exists() else {}
+    base_semana = base.get("semana") if base.get("data") == hoje.isoformat() else None
     if executor is None:
         if shutil.which("claude") is None:
             raise RuntimeError("'claude' não encontrado: a rotina precisa do Claude Code instalado")
         extra = [a for p in pastas for a in ("--add-dir", str(p))]
-        r = subprocess.run(["claude", "-p", texto, "--model", modelo, "--chrome", "--permission-mode", "acceptEdits",
-                            "--output-format", "json", "--max-budget-usd", str(teto),
-                            *extra, "--allowedTools", *FERRAMENTAS_VAGAS],
-                           cwd=raiz, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                           encoding="utf-8", timeout=timeout)
-        try:
-            resultado = json.loads(r.stdout)
-        except json.JSONDecodeError:
-            resultado = {"subtype": "error", "result": (r.stdout or r.stderr).strip()}
+        eventos = eventos_claude(["claude", "-p", texto, "--model", modelo, "--chrome", "--permission-mode", "acceptEdits",
+                                  "--output-format", "stream-json", "--verbose", "--max-budget-usd", str(teto),
+                                  *extra, "--allowedTools", *FERRAMENTAS_VAGAS], raiz, timeout)
     else:
-        resultado = executor(texto, raiz, teto)
+        eventos = executor(texto, raiz, teto)
+    resultado, corte, semana, sessao = {}, "", None, ""
+    for ev in eventos:
+        sessao = ev.get("session_id") or sessao
+        jan = _janelas(ev)
+        if jan:
+            semana = jan.get("seven_day", {}).get("utilization", semana)
+            base_semana = semana if base_semana is None else base_semana
+            if semana is not None and round(semana - base_semana, 4) >= limite_semana():
+                corte = "limite"
+            elif jan.get("five_hour", {}).get("status", "allowed") != "allowed":
+                corte = "janela"
+            if corte:
+                break
+        elif ev.get("type") == "result":
+            resultado = ev
+    getattr(eventos, "close", lambda: None)()
     estourou = resultado.get("subtype") == "error_max_budget_usd"
+    status = ("anomalia" if estourou else corte or ("ok" if resultado.get("subtype") == "success" else "erro"))
+    gasto = round((semana or 0) - (base_semana or 0), 4)
     uso = {"data": hoje.isoformat(), "custo": round(resultado.get("total_cost_usd") or 0, 4), "teto": teto,
-           "turnos": resultado.get("num_turns", 0), "sessao": resultado.get("session_id", ""),
-           "status": "anomalia" if estourou else ("ok" if resultado.get("subtype") == "success" else "erro")}
+           "turnos": resultado.get("num_turns", 0), "sessao": resultado.get("session_id", sessao),
+           "semana_base": base_semana, "semana_fim": semana, "status": status}
     (raiz / USO_VAGAS).parent.mkdir(exist_ok=True)
     with (raiz / USO_VAGAS).open("a", encoding="utf-8") as f:
         f.write(json.dumps(uso, ensure_ascii=False) + "\n")
+    dia_pct = f"{gasto * 7 * 100:.0f}% do uso de um dia ({gasto * 100:.0f}% da semana)"
     if estourou:
         saida = _anomalia(raiz, hoje, uso, historico, diagnostico_sessao(_transcricao(raiz, uso["sessao"])))
+    elif corte == "limite":
+        saida = (f"Rodada encerrada no limite de {LIMITE_DIA:.0%} do uso do dia (rotina + vagas: {dia_pct}). "
+                 f"Os envios feitos até aqui estão em Vagas/Candidaturas.md.")
+    elif corte == "janela":
+        saida = "Rodada encerrada: a janela de 5 horas da assinatura chegou ao limite. Envios em Vagas/Candidaturas.md."
     else:
         saida = (resultado.get("result") or "; ".join(resultado.get("errors") or []) or "sem resposta").strip()
-        saida += f"\n\nGasto: US$ {uso['custo']:.2f} de tabela (teto US$ {teto:.2f}; não é cobrado, roda na assinatura)."
+        saida += f"\n\nUso: rotina + vagas gastaram {dia_pct}; limite {LIMITE_DIA:.0%} do dia."
     gerar_hoje(raiz, hoje)
     diario = raiz / "Diario" / f"{hoje.isoformat()}.md"
     novo = not diario.exists()

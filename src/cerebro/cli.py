@@ -10,6 +10,7 @@
     cerebro hoje                      # dia a dia: gera Hoje.md a partir de Tarefas.md e Para o Claude.md
     cerebro rotina                    # dia a dia: o assistente faz a fila "Para o Claude" sozinho
     cerebro vagas [--levas 10]        # dia a dia: levas de candidatura pelo navegador (passo a passo no cofre)
+    cerebro uso                       # uso da assinatura; guarda a base do dia para o limite da rotina
 """
 
 from __future__ import annotations
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--levas", type=int, default=10)
     p.add_argument("--modelo", default="sonnet")
     p.add_argument("--pasta", action="append", default=[], help="pasta extra que o assistente pode ler (scripts, currículos)")
+    sub.add_parser("uso", help="mostra o uso da assinatura e guarda a base do dia (rodar antes da rotina)")
     p = sub.add_parser("painel", help="gera o painel HTML")
     p.add_argument("--html", default="site/index.html")
     p = sub.add_parser("rodar", help="acorda os agentes enquanto houver recado aberto")
@@ -184,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
 
         print(gerar_arte(args.post))
         return 0
-    if args.comando in ("hoje", "rotina", "agendar", "vagas"):
+    if args.comando in ("hoje", "rotina", "agendar", "vagas", "uso"):
         from . import dia
 
         if args.comando == "agendar":
@@ -193,6 +195,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.comando == "hoje":
             print(f"Atualizado: {dia.gerar_hoje(raiz).name}")
+        elif args.comando == "uso":
+            base = dia.marcar_uso_do_dia(raiz)
+            print(f"Base do dia {base['data']}: semana {base['semana']:.0%}, janela de 5 h {base['cinco_horas']:.0%}")
         elif args.comando == "vagas":
             print(dia.rodar_vagas(raiz, levas=args.levas, modelo=args.modelo, pastas=args.pasta))
         else:
