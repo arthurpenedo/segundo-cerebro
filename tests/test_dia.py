@@ -235,3 +235,34 @@ def test_instrucao_inclui_estudo_do_mercado_e_curriculo():
 def test_instrucao_inclui_uma_aula_por_dia():
     texto = dia.instrucao_rotina(HOJE)
     assert dia.TRILHA in texto and dia.COMO_ESTUDAR in texto and "UMA aula por dia" in texto
+
+
+def test_vagas_exige_o_passo_a_passo_do_cofre(tmp_path):
+    import pytest
+
+    raiz = _cofre(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        dia.rodar_vagas(raiz, lambda t, r: "", hoje=HOJE)
+
+
+def test_vagas_usa_o_executor_e_registra_no_diario(tmp_path):
+    raiz = _cofre(tmp_path)
+    (raiz / "Vagas").mkdir(exist_ok=True)
+    (raiz / dia.VAGAS_ROTINA).write_text("# passo a passo", encoding="utf-8")
+    recebido = {}
+
+    def executor(texto, raiz_):
+        recebido["texto"] = texto
+        return "3 enviadas."
+
+    assert dia.rodar_vagas(raiz, executor, hoje=HOJE, levas=4) == "3 enviadas."
+    texto = recebido["texto"]
+    assert "até 4 levas" in texto and "list_connected_browsers" in texto and "CAPTCHA" in texto and "PARE" in texto
+    diario = (raiz / "Diario" / "2026-10-09.md").read_text(encoding="utf-8")
+    assert "Rotina de candidaturas" in diario and "3 enviadas." in diario
+
+
+def test_vagas_nunca_libera_git_nem_shell_livre():
+    for f in dia.FERRAMENTAS_VAGAS:
+        assert "git" not in f and "gh" not in f.split("(")[-1]
+        assert not f.startswith(("Bash", "PowerShell")) or f.endswith(("(cerebro:*)", "(python:*)"))

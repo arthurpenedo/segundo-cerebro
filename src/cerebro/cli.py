@@ -9,6 +9,7 @@
     cerebro caixa                     # junta os recados para o Arthur e atualiza a Caixa do Arthur
     cerebro hoje                      # dia a dia: gera Hoje.md a partir de Tarefas.md e Para o Claude.md
     cerebro rotina                    # dia a dia: o assistente faz a fila "Para o Claude" sozinho
+    cerebro vagas [--levas 10]        # dia a dia: levas de candidatura pelo navegador (passo a passo no cofre)
 """
 
 from __future__ import annotations
@@ -72,6 +73,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--publicar", action="store_true",
                    help="o motor faz push dos projetos alterados (só com testes passando e sem segredo no diff)")
     p.add_argument("--ignorar", default="", help="projetos que a rotina nunca publica, separados por vírgula")
+    p = sub.add_parser("vagas", help="o assistente faz as levas de candidatura sozinho (Claude in Chrome)")
+    p.add_argument("--levas", type=int, default=10)
+    p.add_argument("--modelo", default="sonnet")
+    p.add_argument("--pasta", action="append", default=[], help="pasta extra que o assistente pode ler (scripts, currículos)")
+    p.add_argument("--orcamento", type=float, default=None, help="teto em US$ por rodada (--max-budget-usd do Claude Code)")
     p = sub.add_parser("painel", help="gera o painel HTML")
     p.add_argument("--html", default="site/index.html")
     p = sub.add_parser("rodar", help="acorda os agentes enquanto houver recado aberto")
@@ -179,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
 
         print(gerar_arte(args.post))
         return 0
-    if args.comando in ("hoje", "rotina", "agendar"):
+    if args.comando in ("hoje", "rotina", "agendar", "vagas"):
         from . import dia
 
         if args.comando == "agendar":
@@ -188,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.comando == "hoje":
             print(f"Atualizado: {dia.gerar_hoje(raiz).name}")
+        elif args.comando == "vagas":
+            print(dia.rodar_vagas(raiz, levas=args.levas, modelo=args.modelo, pastas=args.pasta, orcamento=args.orcamento))
         else:
             print(dia.rodar_rotina(raiz, modelo=args.modelo, projetos=args.projetos, publicar=args.publicar,
                                    ignorar={n.strip() for n in args.ignorar.split(",") if n.strip()}))
