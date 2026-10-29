@@ -12,9 +12,12 @@ O próprio assistente também escreve nela o que dá para adiantar na próxima r
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
+import statistics
 import subprocess
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -383,29 +386,113 @@ def instrucao_vagas(hoje: date, levas: int = 10) -> str:
     )
 
 
+# Orçamento "invisível": a rotina roda na assinatura (sem cobrança), mas uma rodada que gasta MUITO acima do normal é
+# anomalia. O teto de cada rodada sai do histórico (FOLGA x a mediana das últimas rodadas normais); ao estourar, o Claude
+# Code corta a rodada, a rotina fica pausada e entra na fila a investigação. Valores em US$ de tabela (costBasis "list").
+USO_VAGAS = "Diario/vagas-uso.jsonl"
+PAUSA_VAGAS = "Vagas/Rotina de vagas - PAUSADA.md"
+TETO_CALIBRACAO = 15.0  # enquanto não há 3 rodadas normais para medir o normal
+FOLGA = 2.5
+
+
+def historico_vagas(raiz: Path) -> list[dict]:
+    arq = raiz / USO_VAGAS
+    if not arq.exists():
+        return []
+    return [json.loads(linha) for linha in arq.read_text(encoding="utf-8").splitlines() if linha.strip()]
+
+
+def teto_vagas(historico: list[dict]) -> float:
+    normais = [h["custo"] for h in historico if h.get("status") == "ok"][-10:]
+    if len(normais) < 3:
+        return TETO_CALIBRACAO
+    return round(FOLGA * statistics.median(normais), 2)
+
+
+def diagnostico_sessao(transcricao: Path) -> str:
+    """Conta as ferramentas usadas na sessão: é por aí que se vê o que saiu do normal (ex.: screenshot em excesso)."""
+    if not transcricao.exists():
+        return f"transcrição não encontrada ({transcricao})"
+    usos: Counter = Counter()
+    for linha in transcricao.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            conteudo = (json.loads(linha).get("message") or {}).get("content")
+        except (json.JSONDecodeError, AttributeError):
+            continue
+        for bloco in conteudo if isinstance(conteudo, list) else []:
+            if isinstance(bloco, dict) and bloco.get("type") == "tool_use":
+                usos[bloco.get("name", "?").replace("mcp__claude-in-chrome__", "chrome.")] += 1
+    return ", ".join(f"{n} x{q}" for n, q in usos.most_common(10)) or "nenhuma ferramenta usada"
+
+
+def _transcricao(raiz: Path, sessao: str) -> Path:
+    return Path.home() / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(raiz)) / f"{sessao}.jsonl"
+
+
+def _anomalia(raiz: Path, hoje: date, uso: dict, historico: list[dict], diagnostico: str) -> str:
+    normais = [h["custo"] for h in historico if h.get("status") == "ok"][-10:]
+    normal = f"US$ {statistics.median(normais):.2f}" if len(normais) >= 3 else "ainda em calibração"
+    (raiz / PAUSA_VAGAS).write_text(
+        f"---\ntipo: alerta\n---\n# Rotina de vagas PAUSADA ({_data_br(hoje)})\n\n"
+        f"A rodada de {hoje.isoformat()} gastou muito acima do normal e foi cortada.\n\n"
+        f"- Gasto da rodada: US$ {uso['custo']:.2f} (teto US$ {uso['teto']:.2f}; normal {normal}). Valor de tabela, "
+        f"não é cobrado: a rotina roda na assinatura.\n- Turnos: {uso['turnos']}. Sessão: `{uso['sessao']}`.\n"
+        f"- Ferramentas mais usadas: {diagnostico}\n\n"
+        f"Enquanto este arquivo existir, `cerebro vagas` não roda. Depois de achar a causa e corrigir o passo a passo "
+        f"([[{VAGAS_ROTINA[:-3]}]]), apague este arquivo.\n", encoding="utf-8")
+    item = (f"- [ ] Investigar por que a rotina de vagas de {_data_br(hoje)} gastou muito acima do normal "
+            f"(ver [[{PAUSA_VAGAS[:-3]}]]); corrigir o passo a passo e despausar 📅 {hoje.isoformat()}\n")
+    for nome in (FILA, TAREFAS):
+        arq = raiz / nome
+        texto = arq.read_text(encoding="utf-8") if arq.exists() else ""
+        arq.write_text(texto + ("\n" if texto and not texto.endswith("\n") else "") + item, encoding="utf-8")
+    return (f"ANOMALIA: rotina de vagas cortada (US$ {uso['custo']:.2f} > teto US$ {uso['teto']:.2f}; normal {normal}). "
+            f"Pausada até investigar. Ferramentas: {diagnostico}")
+
+
 def rodar_vagas(raiz: str | Path, executor=None, hoje: date | None = None, levas: int = 10, modelo: str = "sonnet",
-                timeout: int = 4 * 3600, pastas=(), orcamento: float | None = None) -> str:
-    """Roda as levas de candidatura (com o Claude Code + Claude in Chrome, ou com um executor de teste) e registra no Diário."""
+                timeout: int = 4 * 3600, pastas=()) -> str:
+    """Roda as levas de candidatura (Claude Code + Claude in Chrome, ou um executor de teste) com teto pelo histórico.
+
+    O executor recebe (texto, raiz, teto) e devolve o resultado JSON do `claude -p --output-format json`.
+    """
     raiz, hoje = Path(raiz), hoje or date.today()
     if not (raiz / VAGAS_ROTINA).exists():
         raise FileNotFoundError(f"falta o passo a passo das candidaturas: {VAGAS_ROTINA}")
+    if (raiz / PAUSA_VAGAS).exists():
+        return f"Rotina de vagas pausada por anomalia de gasto: ver {PAUSA_VAGAS}"
+    historico = historico_vagas(raiz)
+    teto = teto_vagas(historico)
     texto = instrucao_vagas(hoje, levas)
     if executor is None:
         if shutil.which("claude") is None:
             raise RuntimeError("'claude' não encontrado: a rotina precisa do Claude Code instalado")
         extra = [a for p in pastas for a in ("--add-dir", str(p))]
-        if orcamento:
-            extra += ["--max-budget-usd", str(orcamento)]
         r = subprocess.run(["claude", "-p", texto, "--model", modelo, "--chrome", "--permission-mode", "acceptEdits",
+                            "--output-format", "json", "--max-budget-usd", str(teto),
                             *extra, "--allowedTools", *FERRAMENTAS_VAGAS],
                            cwd=raiz, stdin=subprocess.DEVNULL, capture_output=True, text=True,
                            encoding="utf-8", timeout=timeout)
-        saida = (r.stdout or r.stderr).strip()
+        try:
+            resultado = json.loads(r.stdout)
+        except json.JSONDecodeError:
+            resultado = {"subtype": "error", "result": (r.stdout or r.stderr).strip()}
     else:
-        saida = executor(texto, raiz)
+        resultado = executor(texto, raiz, teto)
+    estourou = resultado.get("subtype") == "error_max_budget_usd"
+    uso = {"data": hoje.isoformat(), "custo": round(resultado.get("total_cost_usd") or 0, 4), "teto": teto,
+           "turnos": resultado.get("num_turns", 0), "sessao": resultado.get("session_id", ""),
+           "status": "anomalia" if estourou else ("ok" if resultado.get("subtype") == "success" else "erro")}
+    (raiz / USO_VAGAS).parent.mkdir(exist_ok=True)
+    with (raiz / USO_VAGAS).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(uso, ensure_ascii=False) + "\n")
+    if estourou:
+        saida = _anomalia(raiz, hoje, uso, historico, diagnostico_sessao(_transcricao(raiz, uso["sessao"])))
+    else:
+        saida = (resultado.get("result") or "; ".join(resultado.get("errors") or []) or "sem resposta").strip()
+        saida += f"\n\nGasto: US$ {uso['custo']:.2f} de tabela (teto US$ {teto:.2f}; não é cobrado, roda na assinatura)."
     gerar_hoje(raiz, hoje)
     diario = raiz / "Diario" / f"{hoje.isoformat()}.md"
-    diario.parent.mkdir(exist_ok=True)
     novo = not diario.exists()
     with diario.open("a", encoding="utf-8") as f:
         if novo:

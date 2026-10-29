@@ -245,21 +245,62 @@ def test_vagas_exige_o_passo_a_passo_do_cofre(tmp_path):
         dia.rodar_vagas(raiz, lambda t, r: "", hoje=HOJE)
 
 
-def test_vagas_usa_o_executor_e_registra_no_diario(tmp_path):
+def _cofre_vagas(tmp_path):
     raiz = _cofre(tmp_path)
     (raiz / "Vagas").mkdir(exist_ok=True)
     (raiz / dia.VAGAS_ROTINA).write_text("# passo a passo", encoding="utf-8")
+    return raiz
+
+
+def _rodada(custo, subtype="success", texto="3 enviadas."):
+    return lambda t, r, teto: {"subtype": subtype, "result": texto, "total_cost_usd": custo, "num_turns": 40,
+                               "session_id": "abc"}
+
+
+def test_vagas_usa_o_executor_e_registra_no_diario(tmp_path):
+    raiz = _cofre_vagas(tmp_path)
     recebido = {}
 
-    def executor(texto, raiz_):
-        recebido["texto"] = texto
-        return "3 enviadas."
+    def executor(texto, raiz_, teto):
+        recebido.update(texto=texto, teto=teto)
+        return _rodada(4.0)(texto, raiz_, teto)
 
-    assert dia.rodar_vagas(raiz, executor, hoje=HOJE, levas=4) == "3 enviadas."
+    assert dia.rodar_vagas(raiz, executor, hoje=HOJE, levas=4).startswith("3 enviadas.")
     texto = recebido["texto"]
     assert "até 4 levas" in texto and "list_connected_browsers" in texto and "CAPTCHA" in texto and "PARE" in texto
+    assert recebido["teto"] == dia.TETO_CALIBRACAO
     diario = (raiz / "Diario" / "2026-10-09.md").read_text(encoding="utf-8")
     assert "Rotina de candidaturas" in diario and "3 enviadas." in diario
+    assert dia.historico_vagas(raiz)[0]["status"] == "ok"
+
+
+def test_teto_sai_do_historico_e_ignora_anomalias():
+    assert dia.teto_vagas([{"custo": 4, "status": "ok"}] * 2) == dia.TETO_CALIBRACAO
+    hist = [{"custo": c, "status": "ok"} for c in (3, 4, 5)] + [{"custo": 50, "status": "anomalia"}]
+    assert dia.teto_vagas(hist) == 10.0
+
+
+def test_anomalia_pausa_a_rotina_e_pede_investigacao(tmp_path):
+    raiz = _cofre_vagas(tmp_path)
+    for c in (3, 4, 5):
+        dia.rodar_vagas(raiz, _rodada(c), hoje=HOJE)
+    saida = dia.rodar_vagas(raiz, _rodada(10.3, "error_max_budget_usd"), hoje=HOJE)
+    assert saida.startswith("ANOMALIA") and (raiz / dia.PAUSA_VAGAS).exists()
+    assert "Investigar por que a rotina de vagas" in (raiz / "Para o Claude.md").read_text(encoding="utf-8")
+    assert "Investigar por que a rotina de vagas" in (raiz / "Tarefas.md").read_text(encoding="utf-8")
+    chamou = []
+    assert "pausada" in dia.rodar_vagas(raiz, lambda *a: chamou.append(1), hoje=HOJE)
+    assert not chamou and dia.teto_vagas(dia.historico_vagas(raiz)) == 10.0
+
+
+def test_diagnostico_conta_as_ferramentas(tmp_path):
+    import json
+
+    arq = tmp_path / "s.jsonl"
+    uso = {"type": "tool_use", "name": "mcp__claude-in-chrome__computer"}
+    arq.write_text("\n".join(json.dumps({"message": {"content": [uso]}}) for _ in range(3)) + "\nlixo\n", encoding="utf-8")
+    assert dia.diagnostico_sessao(arq) == "chrome.computer x3"
+    assert "não encontrada" in dia.diagnostico_sessao(tmp_path / "nada.jsonl")
 
 
 def test_vagas_nunca_libera_git_nem_shell_livre():
