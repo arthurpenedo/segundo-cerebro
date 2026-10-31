@@ -20,6 +20,7 @@ import shutil
 import statistics
 import subprocess
 import threading
+import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -497,15 +498,21 @@ def eventos_claude(cmd: list[str], cwd: Path, timeout: int):
         proc.wait()
 
 
-def uso_atual(executor=None) -> dict:
-    """Utilização atual da assinatura ({'semana': 0.18, 'cinco_horas': 0.06}) com uma chamada mínima ao haiku."""
+def uso_atual(executor=None, tentativas: int = 4, espera: float = 60) -> dict:
+    """Utilização atual da assinatura ({'semana': 0.18, 'cinco_horas': 0.06}) com uma chamada mínima ao haiku.
+
+    Tenta de novo porque a rotina pode rodar logo que o PC liga, antes de a internet subir (31/10).
+    """
     cmd = ["claude", "-p", "Responda só: ok", "--model", "haiku", "--output-format", "stream-json", "--verbose"]
-    eventos = executor() if executor else eventos_claude(cmd, Path.cwd(), 300)
-    for ev in eventos:
-        jan = _janelas(ev)
-        if jan:
-            getattr(eventos, "close", lambda: None)()
-            return {"semana": jan["seven_day"]["utilization"], "cinco_horas": jan["five_hour"]["utilization"]}
+    for tentativa in range(tentativas):
+        if tentativa:
+            time.sleep(espera)
+        eventos = executor() if executor else eventos_claude(cmd, Path.cwd(), 300)
+        for ev in eventos:
+            jan = _janelas(ev)
+            if jan:
+                getattr(eventos, "close", lambda: None)()
+                return {"semana": jan["seven_day"]["utilization"], "cinco_horas": jan["five_hour"]["utilization"]}
     raise RuntimeError("o Claude Code não informou a utilização da assinatura")
 
 

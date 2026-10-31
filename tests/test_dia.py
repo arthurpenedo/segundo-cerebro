@@ -358,3 +358,8 @@ def test_vagas_nunca_libera_git_nem_shell_livre():
     for f in dia.FERRAMENTAS_VAGAS:
         assert "git" not in f and "gh" not in f.split("(")[-1]
         assert not f.startswith(("Bash", "PowerShell")) or f.endswith(("(cerebro:*)", "(python:*)"))
+
+
+def test_uso_atual_tenta_de_novo_se_a_internet_ainda_nao_subiu():
+    respostas = iter([[{"type": "result", "subtype": "error"}], [_limite(0.23)]])
+    assert dia.uso_atual(lambda: iter(next(respostas)), espera=0)["semana"] == 0.23
