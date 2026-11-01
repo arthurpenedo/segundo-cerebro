@@ -266,3 +266,29 @@ def followups(raiz: str | Path, hoje: date | None = None, maximo: int = 5, de: i
             f.write(cab + "\n".join(blocos) + "\n")
         arq_feitos.write_text(json.dumps(sorted(feitos | {c["chave"] for c in escolhidos})), encoding="utf-8")
     return escolhidos
+
+
+def enviar_resumo(raiz: str | Path, hoje: date | None = None, smtp=None, usuario: str = USUARIO) -> str:
+    """Manda o Hoje.md por e-mail SÓ para o próprio Arthur (chega no iPhone). Mesmo login do radar; sem tokens."""
+    import smtplib
+    from email.message import EmailMessage
+
+    raiz, hoje = Path(raiz), hoje or date.today()
+    arq = raiz / "Hoje.md"
+    if not arq.exists():
+        return "sem Hoje.md para mandar"
+    texto = re.sub(r"(?s)^---.*?---\s*", "", arq.read_text(encoding="utf-8"))
+    texto = re.sub(r"\[\[(?:[^]|]*\|)?([^]]+)\]\]", r"\1", texto)  # [[nota|texto]] vira texto
+    msg = EmailMessage()
+    msg["From"] = msg["To"] = usuario
+    msg["Subject"] = f"Seu dia · {hoje.strftime('%d/%m')}"
+    msg.set_content(texto)
+    if smtp is None:
+        senha = senha_gmail(usuario)
+        if not senha:
+            return "sem senha do Gmail: rode `cerebro emails --configurar`"
+        smtp = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+        smtp.login(usuario, senha)
+    smtp.send_message(msg)
+    smtp.quit()
+    return f"Resumo do dia enviado para {usuario}"

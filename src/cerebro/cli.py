@@ -82,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("emails", help="radar dos e-mails de recrutamento (Gmail, só leitura, sem tokens)")
     p.add_argument("--dias", type=int, default=3)
     p.add_argument("--configurar", action="store_true", help="guarda a senha de app do Gmail no cofre do Windows")
+    sub.add_parser("resumo", help="manda o Hoje.md (agenda + tarefas) por e-mail para o próprio Arthur")
     p = sub.add_parser("followups", help="rascunhos de follow-up para candidaturas de 7 a 14 dias sem resposta")
     p.add_argument("--max", type=int, default=5)
     p = sub.add_parser("painel", help="gera o painel HTML")
@@ -191,10 +192,13 @@ def main(argv: list[str] | None = None) -> int:
 
         print(gerar_arte(args.post))
         return 0
-    if args.comando in ("emails", "followups"):
-        from . import carreira
+    if args.comando in ("emails", "followups", "resumo"):
+        from . import carreira, dia
 
-        if args.comando == "followups":
+        if args.comando == "resumo":
+            dia.gerar_hoje(raiz)
+            print(carreira.enviar_resumo(raiz))
+        elif args.comando == "followups":
             feitos = carreira.followups(raiz, maximo=args.max)
             print(f"{len(feitos)} follow-up(s) em {carreira.FOLLOWUPS}" if feitos else "Nenhum follow-up novo hoje.")
         elif args.configurar:

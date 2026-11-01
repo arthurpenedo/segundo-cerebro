@@ -137,3 +137,42 @@ def test_rotina_so_aumenta_o_prompt_quando_uma_vaga_avanca(tmp_path):
     saida = dia.rodar_rotina(tmp_path, executor, hoje=HOJE, carreira=(radar_avanco, sem_follow))
     assert "2e. Vagas que AVANÇARAM" in executor.texto and executor.texto.index("2e.") < executor.texto.index("3. Olhe")
     assert "Carreira (feito por script)" in saida
+
+
+VIDA = """# Rotina de vida
+## Segunda a sexta
+- 09:00 Acordar
+- 19:00–00:00 Faculdade
+## Sábado
+- 10:00–12:00 Projeto de IA
+## Domingo
+- 18:00 Revisão da semana
+"""
+
+
+def test_agenda_do_dia_por_dia_da_semana(tmp_path):
+    (tmp_path / dia.VIDA).write_text(VIDA, encoding="utf-8")
+    assert dia.agenda_do_dia(tmp_path, date(2026, 11, 4)) == ["- 09:00 Acordar", "- 19:00–00:00 Faculdade"]  # quarta
+    assert dia.agenda_do_dia(tmp_path, date(2026, 11, 7)) == ["- 10:00–12:00 Projeto de IA"]  # sábado
+    assert dia.agenda_do_dia(tmp_path, date(2026, 11, 8)) == ["- 18:00 Revisão da semana"]  # domingo
+    assert dia.agenda_do_dia(tmp_path / "nada", date(2026, 11, 8)) == []
+    hoje = dia.gerar_hoje(tmp_path, date(2026, 11, 4)).read_text(encoding="utf-8")
+    assert "## 🗓️ Seu dia (quarta)" in hoje and "- 19:00–00:00 Faculdade" in hoje
+
+
+class SmtpFalso:
+    def send_message(self, msg):
+        self.msg = msg
+
+    def quit(self):
+        pass
+
+
+def test_resumo_vai_so_para_o_proprio_arthur_sem_colchetes(tmp_path):
+    (tmp_path / "Hoje.md").write_text("---\ntipo: gerada\n---\n# Hoje\n- ler [[Vagas/Follow-ups|follow-ups]] e [[Tarefas]]\n",
+                                      encoding="utf-8")
+    smtp = SmtpFalso()
+    assert "enviado" in carreira.enviar_resumo(tmp_path, HOJE, smtp=smtp)
+    assert smtp.msg["To"] == smtp.msg["From"] == carreira.USUARIO and smtp.msg["Subject"] == "Seu dia · 02/11"
+    corpo = smtp.msg.get_content()
+    assert "ler follow-ups e Tarefas" in corpo and "tipo: gerada" not in corpo

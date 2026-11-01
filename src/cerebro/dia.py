@@ -37,6 +37,7 @@ PARA_APLICAR = "Vagas/Para aplicar.md"
 CURRICULO = "Curriculos/Para o curriculo.md"
 RADAR = "https://arthurpenedo.github.io/radar-skills-br/"
 TRILHA = "Estudos/Trilha.md"
+VIDA = "Rotina de vida.md"
 COMO_ESTUDAR = "Estudos/Como estudar.md"
 
 _ITEM = re.compile(r"^\s*- \[(?P<feito>[ xX])\] (?P<texto>.+?)\s*$")
@@ -141,6 +142,26 @@ def _lista(tarefas: list[Tarefa], com_data: bool = True) -> str:
     return "\n".join(f"- [ ] {t.titulo}" + (f" · {_data_br(t.prazo)}" if com_data and t.prazo else "") for t in tarefas)
 
 
+_DIAS_SECAO = {"segunda": 0, "terça": 1, "terca": 1, "quarta": 2, "quinta": 3, "sexta": 4, "sábado": 5, "sabado": 5,
+               "domingo": 6}
+
+
+def agenda_do_dia(raiz: str | Path, hoje: date) -> list[str]:
+    """Os blocos de horário do dia, lidos de VIDA: seções '## Segunda a sexta', '## Sábado', '## Domingo' com itens '- ...'.
+    Script puro: o resumo do dia não gasta token."""
+    arq = Path(raiz) / VIDA
+    if not arq.exists():
+        return []
+    blocos, dias = [], set()
+    for linha in arq.read_text(encoding="utf-8").splitlines():
+        if linha.startswith("## "):
+            nomes = [d for n, d in _DIAS_SECAO.items() if n in linha.lower()]
+            dias = set(range(min(nomes), max(nomes) + 1)) if " a " in linha.lower() and len(nomes) == 2 else set(nomes)
+        elif linha.startswith("- ") and hoje.weekday() in dias:
+            blocos.append(linha)
+    return blocos
+
+
 def gerar_hoje(raiz: str | Path, hoje: date | None = None) -> Path:
     """Escreve Hoje.md: atrasadas, hoje, próximos 7 dias, sem data, fila do Claude e rascunhos para revisar."""
     raiz, hoje = Path(raiz), hoje or date.today()
@@ -164,6 +185,9 @@ def gerar_hoje(raiz: str | Path, hoje: date | None = None) -> Path:
     if publicar:
         partes += ["## 🚀 Publicar hoje (diga \"publica\" no Claude Code e poste no LinkedIn)",
                    _lista(publicar, com_data=False), ""]
+    agenda = agenda_do_dia(raiz, hoje)
+    if agenda:
+        partes += [f"## 🗓️ Seu dia ({_DIAS[hoje.weekday()]})", *agenda, ""]
     if atrasadas:
         partes += ["## ⚠️ Atrasado", _lista(atrasadas), ""]
     partes += ["## Hoje", _lista(de_hoje, com_data=False), "",
