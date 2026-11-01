@@ -380,13 +380,52 @@ def publicar_projetos(projetos: Path, hoje: date, ignorar=frozenset(), remoto: s
     return relatorio
 
 
+HISTORIAS = "Vagas/Banco de historias.md"
+
+
+def passo_carreira(raiz: Path, hoje: date, radar=None, follow=None) -> tuple[str, str]:
+    """Roda o radar de e-mails e os follow-ups (scripts, zero token). Devolve (trecho extra do prompt, relatório).
+    O prompt só cresce quando alguma vaga avançou: dia sem novidade não custa nada ao agente."""
+    from . import carreira
+
+    try:
+        r = (radar or carreira.radar_emails)(raiz, hoje)
+    except Exception as e:  # sem internet, senha revogada etc.: a rotina segue
+        r = {"erro": f"radar de e-mails falhou: {e}"[:200], "novos": [], "avancos": []}
+    try:
+        f = (follow or carreira.followups)(raiz, hoje)
+    except Exception as e:
+        f, r["erro_followups"] = [], f"follow-ups falharam: {e}"[:200]
+    cats = [n["categoria"] for n in r["novos"]]
+    rel = [r.get("erro") or f"Radar de e-mails: {len(cats)} de vaga ({cats.count('avanço')} avanços, "
+                              f"{cats.count('recusa')} recusas, {cats.count('confirmação')} confirmações)."]
+    if r.get("erro_followups"):
+        rel.append(r["erro_followups"])
+    elif f:
+        rel.append(f"Follow-ups prontos para enviar: {len(f)} em {carreira.FOLLOWUPS}.")
+    extra = ""
+    if r["avancos"]:
+        itens = "\n".join(f"- {n['de']} · {n['assunto']}" + (f" · prazo: {n['prazo']}" if n["prazo"] else "")
+                          for n in r["avancos"])
+        extra = (f"\n2e. Vagas que AVANÇARAM (vindas do radar de e-mail; não abra o radar):\n{itens}\n"
+                 f"Para cada empresa sem nota ainda, crie `Vagas/Preparacao - <empresa>.md` com no máximo 40 linhas: "
+                 f"o que a empresa faz (uma busca na web), o que essa etapa pede, 3 a 5 perguntas prováveis com resposta "
+                 f"curta usando SÓ histórias de `{HISTORIAS}` (leia só os títulos e a história escolhida; nunca invente). "
+                 f"Resposta em inglês se o e-mail for em inglês.\n")
+    return extra, " ".join(rel)
+
+
 def rodar_rotina(raiz: str | Path, executor=None, hoje: date | None = None, modelo: str = "sonnet",
                  timeout: int = 3 * 3600, projetos: str | Path | None = None, publicar: bool = False,
-                 ignorar=frozenset()) -> str:
+                 ignorar=frozenset(), carreira=None) -> str:
     """Roda a rotina (com o Claude Code, ou com um executor de teste), regenera Hoje.md e registra no Diário."""
     raiz, hoje = Path(raiz), hoje or date.today()
     projetos = Path(projetos) if projetos else None
     texto = instrucao_rotina(hoje, projetos)
+    rel_carreira = ""
+    if carreira is not None or executor is None:  # nos testes só roda quando o teste injeta (radar, follow)
+        extra_prompt, rel_carreira = passo_carreira(raiz, hoje, *(carreira or ()))
+        texto = texto.replace("\n3. Olhe", extra_prompt + "3. Olhe", 1) if extra_prompt else texto
     if executor is None:
         if shutil.which("claude") is None:
             raise RuntimeError("'claude' não encontrado: a rotina precisa do Claude Code instalado")
@@ -399,6 +438,8 @@ def rodar_rotina(raiz: str | Path, executor=None, hoje: date | None = None, mode
         saida = (r.stdout or r.stderr).strip()
     else:
         saida = executor(texto, raiz)
+    if rel_carreira:
+        saida += "\n\nCarreira (feito por script): " + rel_carreira
     if projetos and publicar:
         relatorio = publicar_projetos(projetos, hoje, ignorar)
         if relatorio:

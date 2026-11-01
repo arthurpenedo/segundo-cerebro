@@ -79,6 +79,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--modelo", default="sonnet")
     p.add_argument("--pasta", action="append", default=[], help="pasta extra que o assistente pode ler (scripts, currículos)")
     sub.add_parser("uso", help="mostra o uso da assinatura e guarda a base do dia (rodar antes da rotina)")
+    p = sub.add_parser("emails", help="radar dos e-mails de recrutamento (Gmail, só leitura, sem tokens)")
+    p.add_argument("--dias", type=int, default=3)
+    p.add_argument("--configurar", action="store_true", help="guarda a senha de app do Gmail no cofre do Windows")
+    p = sub.add_parser("followups", help="rascunhos de follow-up para candidaturas de 7 a 14 dias sem resposta")
+    p.add_argument("--max", type=int, default=5)
     p = sub.add_parser("painel", help="gera o painel HTML")
     p.add_argument("--html", default="site/index.html")
     p = sub.add_parser("rodar", help="acorda os agentes enquanto houver recado aberto")
@@ -185,6 +190,18 @@ def main(argv: list[str] | None = None) -> int:
         from .arte import gerar_arte
 
         print(gerar_arte(args.post))
+        return 0
+    if args.comando in ("emails", "followups"):
+        from . import carreira
+
+        if args.comando == "followups":
+            feitos = carreira.followups(raiz, maximo=args.max)
+            print(f"{len(feitos)} follow-up(s) em {carreira.FOLLOWUPS}" if feitos else "Nenhum follow-up novo hoje.")
+        elif args.configurar:
+            print(carreira.configurar())
+        else:
+            r = carreira.radar_emails(raiz, dias=args.dias)
+            print(r.get("erro") or f"{len(r['novos'])} e-mail(s) de vaga, {len(r['avancos'])} avanço(s); ver {carreira.RADAR}")
         return 0
     if args.comando in ("hoje", "rotina", "agendar", "vagas", "uso"):
         from . import dia
