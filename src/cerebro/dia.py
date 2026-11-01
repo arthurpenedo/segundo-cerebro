@@ -310,7 +310,12 @@ def publicar_projetos(projetos: Path, hoje: date, ignorar=frozenset(), remoto: s
             git("reset", "-q")
             relatorio.append(f"{pasta.name}: NÃO commitado, o diff parece ter uma chave ou segredo")
             continue
-        git("commit", "-q", "-m", msg)
+        commit = git("commit", "-q", "-m", msg)
+        if commit.returncode != 0:  # ex.: repositório sem user.name/user.email (api-cdc, 29 a 31/10)
+            git("reset", "-q")
+            erro = (commit.stderr or commit.stdout).strip().splitlines()
+            relatorio.append(f"{pasta.name}: NÃO commitado, o commit falhou ({erro[-1] if erro else 'sem detalhe'})")
+            continue
         if not re.search(remoto, git("remote", "get-url", "origin").stdout or ""):
             relatorio.append(f"{pasta.name}: commit só local (o remoto não é do Arthur)")
         elif not testes(pasta):

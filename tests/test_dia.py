@@ -165,6 +165,16 @@ def test_publicar_faz_push_com_a_mensagem_do_agente(tmp_path):
     assert "Adiciona teste do parser" in git("log", "-1", "--format=%s")
 
 
+def test_publicar_nao_diz_publicado_quando_o_commit_falha(tmp_path):
+    pasta, git = _repo_com_origem(tmp_path, "proj")
+    (pasta / ".git" / "hooks" / "pre-commit").write_text("#!/bin/sh\necho sem identidade >&2\nexit 1\n", encoding="utf-8")
+    (pasta / "a.txt").write_text("2", encoding="utf-8")
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True,
+                                lint=lambda p, corrigir=False: True)
+    assert rel == ["proj: NÃO commitado, o commit falhou (sem identidade)"]
+    assert git("log", "-1", "--format=%s") == "inicio\n" and "a.txt" in git("status", "--porcelain")
+
+
 def test_publicar_sem_mudanca_nao_commita(tmp_path):
     _repo_com_origem(tmp_path, "proj")
     assert dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True) == []
