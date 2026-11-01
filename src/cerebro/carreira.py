@@ -169,6 +169,10 @@ def radar_emails(raiz: str | Path, hoje: date | None = None, dias: int = 3, cone
     return {"novos": novos, "avancos": avancos}
 
 
+EN = re.compile(r"(engineer|analyst|specialist|assistant|associate|developer|support|manager|agent|trainer|tester|"
+                r"representative|executive|coordinator|writer|rater|annotator|evaluator|operations|customer|remote)", re.I)
+PT = re.compile(r"(analista|desenvolvedor|assistente|engenheiro|programador|estagi|atendimento|suporte|cientista|"
+                r"qualidade|dados|opera[çc][õo]es|automa[çc])", re.I)
 _DATA_SECAO = re.compile(r"(\d{4})-(\d{2})-(\d{2})|(\d{1,2})/(\d{1,2})(?:/(\d{4}))?")
 
 
@@ -213,7 +217,7 @@ def candidaturas_enviadas(texto: str, ano: int) -> list[dict]:
         empresa = re.sub(r"\s*\([^)]*\)", "", empresa.replace("**", "")).strip()
         if not empresa or not vaga or len(empresa) > 60:
             continue
-        ingles = bool(re.search(r"USD|internacional|gring|[Rr]emote|LATAM", secao)) or not re.search(r"[ãçéêíóú]", vaga)
+        ingles = bool(re.search(r"USD|internacional|gring", secao) or EN.search(vaga)) and not PT.search(vaga)
         saida.append({"empresa": empresa, "vaga": vaga, "data": quando or secao_data, "ingles": ingles})
     return saida
 

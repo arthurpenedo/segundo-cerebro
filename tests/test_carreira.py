@@ -46,6 +46,8 @@ def test_le_os_dois_formatos_de_tabela():
         ("Jobgether", "QA Engineer"), ("Jobgether", "Founders Associate"), ("Nova SA", "Analista de Dados Júnior")]
     assert c[0]["data"] == date(2026, 10, 27) and c[2]["data"] == date(2026, 10, 24)
     assert c[0]["ingles"] and not c[4]["ingles"]
+    elgin = "## x (20/10/2026)\n| A | B |\n|---|---|\n| Elgin: Analista de Sistemas Jr | enviada |\n"
+    assert not carreira.candidaturas_enviadas(elgin, 2026)[0]["ingles"]  # vaga brasileira sem acento é PT
 
 
 def _cofre(tmp_path, radar=""):
