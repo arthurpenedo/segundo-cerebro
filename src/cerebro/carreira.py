@@ -33,7 +33,7 @@ USUARIO = "penedo.arthur@gmail.com"
 
 # Ordem importa: recusa antes de avanço ("unfortunately ... next steps" é recusa).
 CATEGORIAS = [
-    ("recusa", r"unfortunately|not (be )?moving forward|decided to (move|proceed) with other|other candidates|"
+    ("recusa", r"unfortunately|not (be )?moving forward|not (to )?move forward|not to proceed|decided to (move|proceed) with other|other candidates|"
                r"infelizmente|não (vamos|seguiremos|daremos)|nao (vamos|seguiremos)|outros candidatos|position has been filled"),
     ("avanço", r"interview|entrevista|assessment|avalia[çc][ãa]o|teste (t[ée]cnico|online)|video|vídeo|survey|questionnaire|"
                r"question[áa]rio|next step|pr[óo]xima etapa|moving forward|move forward|schedule|agendar|calendly|"
@@ -44,7 +44,8 @@ CATEGORIAS = [
 RECRUTAMENTO = re.compile(r"applica|candidat|vaga|job|position|role|recruit|recrut|talent|hiring|interview|entrevista|"
                           r"greenhouse|lever|ashby|workable|gupy|inhire|smartrecruiters|teamtailor|recruitee", re.I)
 RUIDO = re.compile(r"jobalerts?|job alert|alerta de vaga|newsletter|digest|vagas para você|jobs you may|"
-                   r"linkedin\.com.*(notifications|messages-noreply)|unsubscribe from job", re.I)
+                   r"linkedin\.com.*(notifications|messages-noreply)|unsubscribe from job|acordo ?certo|codecademy|\d+% off|"
+                   r"desconto|black friday|application draft|draft is waiting|video interview received", re.I)
 PRAZO = re.compile(r"[^.\n]{0,120}\b(deadline|due|by (monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
                    r"last day|expires?|within \d+|prazo|até (o dia|dia|segunda|terça|quarta|quinta|sexta)|"
                    r"no máximo|in the next (one|two|\d+)|nas próximas)[^.\n]{0,140}", re.I)

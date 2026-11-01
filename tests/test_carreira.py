@@ -14,6 +14,10 @@ def test_classifica_recusa_avanco_confirmacao_e_ignora_ruido():
                                 "application") == "confirmação"
     assert carreira.classificar("LinkedIn <jobalerts-noreply@linkedin.com>", "Vagas para você", "interview") is None
     assert carreira.classificar("Loja <promo@loja.com>", "Black Friday", "50% off") is None
+    assert carreira.classificar("Tob", "Thanks for your interest in Cloudwalk", "after reviewing your application we decided to not move "
+                                "forward at this time") == "recusa"
+    assert carreira.classificar("Codecademy", "50% off Pro ends today", "interview prep course") is None
+    assert carreira.classificar("Ciklum Career", "Just checking in — your application draft is waiting", "") is None
 
 
 def test_prazo_pega_a_frase_do_deadline():
