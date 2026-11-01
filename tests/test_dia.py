@@ -91,6 +91,7 @@ def test_cli_hoje(tmp_path, capsys):
 
 def test_criacao_libera_testes_e_commit_local_mas_nunca_publicar():
     assert "Bash(git commit:*)" in dia.FERRAMENTAS_CRIACAO and "PowerShell(pytest:*)" in dia.FERRAMENTAS_CRIACAO
+    assert "Bash(pip install:*)" in dia.FERRAMENTAS_CRIACAO and "Bash(npm:*)" in dia.FERRAMENTAS_CRIACAO
     for f in dia.FERRAMENTAS_CRIACAO + dia.FERRAMENTAS_ROTINA:
         assert "push" not in f and "gh" not in f.split("(")[-1]
 
@@ -100,7 +101,7 @@ def test_instrucao_muda_com_pasta_de_projetos(tmp_path):
 
     com = dia.instrucao_rotina(HOJE, Path("C:/projetos"))
     sem = dia.instrucao_rotina(HOJE)
-    assert "Como criar.md" in com and "NÃO usa git" in com
+    assert "Como criar.md" in com and "NUNCA faz push" in com and dia.NOVO_REPO in com
     assert "não há pasta de projetos" in sem
 
 
@@ -175,6 +176,46 @@ def test_publicar_nao_diz_publicado_quando_o_commit_falha(tmp_path):
     assert git("log", "-1", "--format=%s") == "inicio\n" and "a.txt" in git("status", "--porcelain")
 
 
+def test_publicar_da_push_em_todos_os_commits_do_agente(tmp_path):
+    pasta, git = _repo_com_origem(tmp_path, "proj")
+    for i, m in enumerate(["Teste do parser", "Caso de borda no CSV", "README com exemplo"], 2):
+        (pasta / "a.txt").write_text(str(i), encoding="utf-8")
+        git("commit", "-q", "-am", m)
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True,
+                                lint=lambda p, corrigir=False: True)
+    assert rel == ["proj: publicado · 3 commits: Teste do parser; Caso de borda no CSV; README com exemplo"]
+    assert git("status", "-sb").splitlines()[0] == "## main...origin/main"
+
+
+def test_publicar_cria_repositorio_de_projeto_novo(tmp_path):
+    import subprocess
+
+    pasta = tmp_path / "projetos" / "novo"
+    pasta.mkdir(parents=True)
+
+    def git(*a):
+        return subprocess.run(["git", "-C", str(pasta), *a], capture_output=True, text=True, check=True).stdout
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    (pasta / "README.md").write_text("# novo", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "inicio")
+    criados = []
+
+    def criar(p, descricao):
+        criados.append((p.name, descricao))
+        return ""
+
+    ok = dict(remoto="remotos", testes=lambda p: True, lint=lambda p, corrigir=False: True, criar_repo=criar)
+    assert dia.publicar_projetos(tmp_path / "projetos", HOJE, **ok) == []  # sem o aviso, não cria
+    (pasta / dia.NOVO_REPO).write_text("Pipeline de dados do consumidor\n", encoding="utf-8")
+    rel = dia.publicar_projetos(tmp_path / "projetos", HOJE, **ok)
+    assert rel == ["novo: repositório NOVO criado e publicado · 1 commits · Pipeline de dados do consumidor"]
+    assert criados == [("novo", "Pipeline de dados do consumidor")] and not (pasta / dia.NOVO_REPO).exists()
+
+
 def test_publicar_sem_mudanca_nao_commita(tmp_path):
     _repo_com_origem(tmp_path, "proj")
     assert dia.publicar_projetos(tmp_path / "projetos", HOJE, remoto="remotos", testes=lambda p: True) == []
@@ -233,7 +274,8 @@ def test_instrucao_pede_melhorias_reais_com_mensagem():
     from pathlib import Path
 
     texto = dia.instrucao_rotina(HOJE, Path("C:/projetos"))
-    assert dia.MELHORIAS in texto and dia.MSG_COMMIT in texto and "REAIS" in texto
+    assert dia.MELHORIAS in texto and "REAIS" in texto and "12 a 15 commits" in texto
+    assert "Projeto GRANDE" in texto and "ECONOMIA DE TOKENS" in texto
 
 
 def test_instrucao_inclui_estudo_do_mercado_e_curriculo():
