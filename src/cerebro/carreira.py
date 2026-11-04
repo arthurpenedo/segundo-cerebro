@@ -45,7 +45,8 @@ RECRUTAMENTO = re.compile(r"applica|candidat|vaga|job|position|role|recruit|recr
                           r"greenhouse|lever|ashby|workable|gupy|inhire|smartrecruiters|teamtailor|recruitee", re.I)
 RUIDO = re.compile(r"jobalerts?|job alert|alerta de vaga|newsletter|digest|vagas para você|jobs you may|"
                    r"linkedin\.com.*(notifications|messages-noreply)|unsubscribe from job|acordo ?certo|codecademy|\d+% off|"
-                   r"desconto|black friday|application draft|draft is waiting|video interview received", re.I)
+                   r"desconto|black friday|application draft|draft is waiting|video interview received|seu dia ·|new jobs:|"
+                   r"seu próximo desafio profissional", re.I)
 PRAZO = re.compile(r"[^.\n]{0,120}\b(deadline|due|by (monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
                    r"last day|expires?|within \d+|prazo|até (o dia|dia|segunda|terça|quarta|quinta|sexta)|"
                    r"no máximo|in the next (one|two|\d+)|nas próximas)[^.\n]{0,140}", re.I)

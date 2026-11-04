@@ -180,3 +180,9 @@ def test_resumo_vai_so_para_o_proprio_arthur_sem_colchetes(tmp_path):
     assert smtp.msg["To"] == smtp.msg["From"] == carreira.USUARIO and smtp.msg["Subject"] == "Seu dia · 02/11"
     corpo = smtp.msg.get_content()
     assert "ler follow-ups e Tarefas" in corpo and "tipo: gerada" not in corpo
+
+
+def test_resumo_proprio_e_alertas_sao_ruido():
+    assert carreira.classificar("penedo.arthur@gmail.com", "Seu dia · 03/11", "vaga entrevista") is None
+    assert carreira.classificar("Wellfound", "New jobs: AI/ML Engineer at Niuro", "apply now") is None
+    assert carreira.classificar("Catho", "Seu próximo desafio profissional chegou", "vaga") is None
