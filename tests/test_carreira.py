@@ -18,6 +18,17 @@ def test_classifica_recusa_avanco_confirmacao_e_ignora_ruido():
                                 "forward at this time") == "recusa"
     assert carreira.classificar("Codecademy", "50% off Pro ends today", "interview prep course") is None
     assert carreira.classificar("Ciklum Career", "Just checking in — your application draft is waiting", "") is None
+    # formatos reais (anonimizados) que o radar antigo marcava como avanço
+    assert carreira.classificar("Empresa X", "Retorno processo seletivo | Empresa X", "Nós recebemos diversas candidaturas "
+                                "para esta posição e fazer uma escolha foi um desafio") == "recusa"
+    assert carreira.classificar("Empresa Y", "Agradecimento!", "Neste momento optamos pela contratação de outro "
+                                "profissional para a vaga") == "recusa"
+    assert carreira.classificar("Fulana", "Banco Z | Retorno sobre a sua candidatura", "Seguimos com outras "
+                                "posições abertas e você pode se candidatar") == "recusa"
+    assert carreira.classificar("Loja Moda", "Volte e veja as novidades", "vaga de convite... clique no botão CANCELAR "
+                                "ASSINATURA") is None
+    assert carreira.classificar("Banco W - Carreiras", "Testes Comportamentais", "Na próxima etapa do processo "
+                                "seletivo, faça o mapeamento comportamental") == "avanço"
 
 
 def test_prazo_pega_a_frase_do_deadline():
@@ -110,9 +121,25 @@ def test_radar_registra_avanco_com_prazo_cria_tarefa_e_nao_repete(tmp_path):
     assert gmail.readonly is True
     assert [n["categoria"] for n in r["novos"]] == ["avanço", "confirmação"] and len(r["avancos"]) == 1
     radar = (raiz / carreira.RADAR).read_text(encoding="utf-8")
-    assert "**avanço** · Lauren · One-way video interview invitation · ⏰" in radar
-    assert "Vaga avançou" in (raiz / "Tarefas.md").read_text(encoding="utf-8")
+    assert "**avanço** · Lauren · One-way video interview invitation · ❓ conferir" in radar
+    assert "⏰" in radar and "👉 Please record your video" in radar
+    assert "Conferir se é vaga sua" in (raiz / "Tarefas.md").read_text(encoding="utf-8")
     assert carreira.radar_emails(raiz, HOJE, conexao=GmailFalso(gmail.mensagens))["novos"] == []
+
+
+def test_radar_separa_retorno_de_vaga_sua_ignora_proprio_email_e_cobranca(tmp_path):
+    raiz = _cofre(tmp_path)
+    gmail = GmailFalso([
+        _msg("<a>", "Nova SA <rh@novasa.com.br>", "Retorno processo seletivo",
+             "Olá Arthur! Na próxima etapa, envie um áudio de 1 minuto se apresentando. Prazo: até sexta-feira."),
+        _msg("<b>", "Arthur <penedo.arthur@gmail.com>", "Entrevista amanhã", "lembrete de entrevista"),
+        _msg("<d>", "Acerto <x@acerto.com.br>", "ANULAÇÃO", "convite para entrevista"),
+    ])
+    r = carreira.radar_emails(raiz, HOJE, conexao=gmail)
+    assert [n["de"] for n in r["novos"]] == ["Nova SA"] and r["avancos"][0]["candidatura"]
+    assert "envie um áudio" in r["avancos"][0]["acao"]
+    tarefa = (raiz / "Tarefas.md").read_text(encoding="utf-8")
+    assert "🔴 RESPONDER EM 24H" in tarefa and "pedem:" in tarefa
 
 
 def test_radar_sem_senha_nao_quebra(tmp_path, monkeypatch):

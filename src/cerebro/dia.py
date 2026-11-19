@@ -431,9 +431,14 @@ def passo_carreira(raiz: Path, hoje: date, radar=None, follow=None) -> tuple[str
         rel.append(f"Follow-ups prontos para enviar: {len(f)} em {carreira.FOLLOWUPS}.")
     extra = ""
     if r["avancos"]:
-        itens = "\n".join(f"- {n['de']} · {n['assunto']}" + (f" · prazo: {n['prazo']}" if n["prazo"] else "")
+        itens = "\n".join(f"- {n['de']} · {n['assunto']}"
+                          + ("" if n.get("candidatura", True) else " · (empresa fora das candidaturas: conferir se é golpe)")
+                          + (f" · pedem: {n['acao']}" if n.get("acao") else "")
+                          + (f" · prazo: {n['prazo']}" if n["prazo"] else "")
                           for n in r["avancos"])
         extra = (f"\n2e. Vagas que AVANÇARAM (vindas do radar de e-mail; não abra o radar):\n{itens}\n"
+                 f"No topo da nota de preparação, escreva em 1 linha O QUE a empresa pediu e o PRAZO (\"pedem\"/\"prazo\" "
+                 f"acima): retorno não respondido em 24h é vaga perdida.\n"
                  f"Para cada empresa sem nota ainda, crie `Vagas/Preparacao - <empresa>.md` com no máximo 40 linhas: "
                  f"o que a empresa faz (uma busca na web), o que essa etapa pede, 3 a 5 perguntas prováveis com resposta "
                  f"curta usando SÓ histórias de `{HISTORIAS}` (leia só os títulos e a história escolhida; nunca invente). "

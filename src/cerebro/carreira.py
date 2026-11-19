@@ -34,7 +34,10 @@ USUARIO = "penedo.arthur@gmail.com"
 # Ordem importa: recusa antes de avanço ("unfortunately ... next steps" é recusa).
 CATEGORIAS = [
     ("recusa", r"unfortunately|not (be )?moving forward|not (to )?move forward|not to proceed|decided to (move|proceed) with other|other candidates|"
-               r"infelizmente|não (vamos|seguiremos|daremos)|nao (vamos|seguiremos)|outros candidatos|position has been filled"),
+               r"infelizmente|não (vamos|seguiremos|daremos)|nao (vamos|seguiremos)|outros candidatos|position has been filled|"
+               r"optamos (pela|por|em)|outro profissional|outra pessoa candidata|escolha foi um desafio|decis[ãa]o (foi )?dif[íi]cil|"
+               r"seguimos com outras posi|outras (vagas|posi[çc][õo]es) abertas|n[ãa]o foi selecionad|n[ãa]o avan[çc]ar|"
+               r"perfil (n[ãa]o|mais) (est[áa] )?(aderente|alinhado)|banco de talentos"),
     ("avanço", r"interview|entrevista|assessment|avalia[çc][ãa]o|teste (t[ée]cnico|online)|video|vídeo|survey|questionnaire|"
                r"question[áa]rio|next step|pr[óo]xima etapa|moving forward|move forward|schedule|agendar|calendly|"
                r"few (more )?questions|case study|desafio|exam|prova|invitation|convite|offer|proposta"),
@@ -42,11 +45,19 @@ CATEGORIAS = [
                     r"recebemos (a )?sua candidatura|candidatura (recebida|enviada)|obrigad[oa] por se candidatar"),
 ]
 RECRUTAMENTO = re.compile(r"applica|candidat|vaga|job|position|role|recruit|recrut|talent|hiring|interview|entrevista|"
+                          r"processo seletivo|sele[çc][ãa]o|seletiv|"
                           r"greenhouse|lever|ashby|workable|gupy|inhire|smartrecruiters|teamtailor|recruitee", re.I)
 RUIDO = re.compile(r"jobalerts?|job alert|alerta de vaga|newsletter|digest|vagas para você|jobs you may|"
                    r"linkedin\.com.*(notifications|messages-noreply)|unsubscribe from job|acordo ?certo|codecademy|\d+% off|"
                    r"desconto|black friday|application draft|draft is waiting|video interview received|seu dia ·|new jobs:|"
-                   r"seu próximo desafio profissional", re.I)
+                   r"seu próximo desafio profissional|acerto|linkedin premium|notas fiscais|comprovante de inscri|"
+                   r"agradecemos sua participa|wellfound|catho", re.I)
+ATS = re.compile(r"greenhouse|lever\.co|ashbyhq|workable|gupy|inhire|smartrecruiters|teamtailor|recruitee|myworkdayjobs|"
+                 r"workday|pandape|kenoby|solides|bamboohr|jobvite|icims|mindsight|quickin", re.I)
+# Frase que diz o que a empresa pede (para não precisar abrir o e-mail e não perder prazo).
+ACAO = re.compile(r"[^.!?\n]{0,140}\b(envi[ae]|grav[ae]|record|submit|complete|responda|respond|preench|fill|agend|schedule|"
+                  r"book|clique|click|acesse|confirm|link|áudio|audio|vídeo|video|teste|test|desafio|formul[áa]rio|form)"
+                  r"[^.!?\n]{0,160}", re.I)
 PRAZO = re.compile(r"[^.\n]{0,120}\b(deadline|due|by (monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
                    r"last day|expires?|within \d+|prazo|até (o dia|dia|segunda|terça|quarta|quinta|sexta)|"
                    r"no máximo|in the next (one|two|\d+)|nas próximas)[^.\n]{0,140}", re.I)
@@ -82,6 +93,8 @@ def classificar(remetente: str, assunto: str, corpo: str) -> str | None:
     tudo = f"{assunto} {corpo[:3000]}"
     if RUIDO.search(f"{remetente} {assunto}") or not RECRUTAMENTO.search(f"{remetente} {tudo}"):
         return None
+    if re.search(r"cancelar (a )?assinatura|descadastr|volte e veja|novidades da loja", tudo, re.I):  # loja/propaganda
+        return None
     for nome, padrao in CATEGORIAS:
         if re.search(padrao, tudo, re.I):
             return nome
@@ -91,6 +104,26 @@ def classificar(remetente: str, assunto: str, corpo: str) -> str | None:
 def prazo(corpo: str) -> str:
     m = PRAZO.search(corpo)
     return m.group(0).strip(" ,;") if m else ""
+
+
+def acao(corpo: str) -> str:
+    """A frase do e-mail que diz o que fazer (enviar áudio, agendar, fazer teste...)."""
+    m = ACAO.search(corpo)
+    return m.group(0).strip(" ,;") if m else ""
+
+
+def empresas_aplicadas(raiz: str | Path, ano: int) -> set[str]:
+    """Nomes (minúsculos) das empresas com candidatura enviada, para separar retorno real de e-mail genérico."""
+    arq = Path(raiz) / CANDIDATURAS
+    if not arq.exists():
+        return set()
+    return {c["empresa"].lower() for c in candidaturas_enviadas(arq.read_text(encoding="utf-8"), ano)
+            if len(c["empresa"]) >= 4}
+
+
+def _da_candidatura(empresas: set[str], endereco: str, texto: str) -> bool:
+    texto = texto.lower()
+    return bool(ATS.search(endereco)) or any(e in texto for e in empresas)
 
 
 def senha_gmail(usuario: str = USUARIO) -> str:
@@ -131,7 +164,7 @@ def radar_emails(raiz: str | Path, hoje: date | None = None, dias: int = 3, cone
     conexao.select("INBOX", readonly=True)
     desde = (hoje - timedelta(days=dias)).strftime("%d-%b-%Y")
     _, dados = conexao.search(None, f"(SINCE {desde})")
-    novos = []
+    novos, empresas = [], empresas_aplicadas(raiz, hoje.year)
     for num in (dados[0] or b"").split():
         _, partes = conexao.fetch(num, "(BODY.PEEK[])")
         bruto = next((p[1] for p in partes if isinstance(p, tuple)), b"")
@@ -142,31 +175,43 @@ def radar_emails(raiz: str | Path, hoje: date | None = None, dias: int = 3, cone
         vistos.add(mid)
         de, assunto = _txt(msg.get("From")), _txt(msg.get("Subject"))
         corpo = _corpo(msg)
+        nome, end = parseaddr(de)
+        if end.lower() == usuario.lower():  # e-mail que o próprio Arthur (ou a rotina) mandou
+            continue
         cat = classificar(de, assunto, corpo)
         if cat:
-            nome, end = parseaddr(de)
             novos.append({"data": (msg.get("Date") or "")[:22], "de": nome or end, "email": end, "assunto": assunto[:140],
-                          "categoria": cat, "prazo": prazo(corpo)[:240]})
+                          "categoria": cat, "prazo": prazo(corpo)[:240], "acao": acao(corpo)[:240],
+                          "candidatura": _da_candidatura(empresas, end, f"{de} {assunto} {corpo[:2000]}")})
     try:
         conexao.logout()
     except (imaplib.IMAP4.error, OSError):
         pass
     arq_vistos.parent.mkdir(parents=True, exist_ok=True)
     arq_vistos.write_text(json.dumps(sorted(vistos)[-3000:]), encoding="utf-8")
-    avancos = [n for n in novos if n["categoria"] == "avanço"]
+    # Avanço de empresa onde ele se candidatou vem primeiro; o resto ("conferir") pode ser convite genérico ou golpe.
+    avancos = sorted((n for n in novos if n["categoria"] == "avanço"), key=lambda n: not n["candidatura"])
     if novos:
         radar = raiz / RADAR
         cab = "" if radar.exists() else "---\ntipo: radar\n---\n# Radar de e-mails de recrutamento\n\nGerado por `cerebro emails` (só leitura).\n"
+        ordem = ["avanço", "recusa", "confirmação"]
         linhas = [f"\n## {hoje.isoformat()}"] + [
-            f"- **{n['categoria']}** · {n['de']} · {n['assunto']}" + (f" · ⏰ {n['prazo']}" if n["prazo"] else "")
-            for n in sorted(novos, key=lambda n: ["avanço", "recusa", "confirmação"].index(n["categoria"]))]
+            f"- **{n['categoria']}** · {n['de']} · {n['assunto']}"
+            + ("" if n["categoria"] != "avanço" else " · ✅ vaga das candidaturas" if n["candidatura"]
+               else " · ❓ conferir: empresa fora das candidaturas")
+            + (f" · ⏰ {n['prazo']}" if n["prazo"] else "")
+            + (f" · 👉 {n['acao']}" if n["categoria"] == "avanço" and n["acao"] else "")
+            for n in sorted(novos, key=lambda n: (ordem.index(n["categoria"]), not n["candidatura"]))]
         with radar.open("a", encoding="utf-8") as f:
             f.write(cab + "\n".join(linhas) + "\n")
     if avancos:
         tarefas = raiz / "Tarefas.md"
         texto = tarefas.read_text(encoding="utf-8") if tarefas.exists() else "# Tarefas\n"
-        novas = "".join(f"- [ ] Vaga avançou: responder \"{n['assunto'][:90]}\" ({n['de']})"
-                        f"{' — prazo: ' + n['prazo'][:120] if n['prazo'] else ''} 📅 {hoje.isoformat()}\n" for n in avancos)
+        novas = "".join(
+            f"- [ ] {'🔴 RESPONDER EM 24H' if n['candidatura'] else '❓ Conferir se é vaga sua'}: "
+            f"\"{n['assunto'][:90]}\" ({n['de']})"
+            f"{' — pedem: ' + n['acao'][:120] if n['acao'] else ''}"
+            f"{' — prazo: ' + n['prazo'][:120] if n['prazo'] else ''} 📅 {hoje.isoformat()}\n" for n in avancos)
         tarefas.write_text(texto + ("" if texto.endswith("\n") else "\n") + novas, encoding="utf-8")
     return {"novos": novos, "avancos": avancos}
 
