@@ -587,7 +587,7 @@ def _anomalia(raiz: Path, hoje: date, uso: dict, historico: list[dict], diagnost
 # Limite de uso da assinatura (pedido do Arthur, 29/10): rotina + vagas gastam no máximo LIMITE_DIA do uso de um dia.
 # O plano não tem limite diário, só a janela de 5 horas e a semana; então o "dia" é 1/7 da semana. O Claude Code informa
 # a utilização (0 a 1) nos eventos `rate_limit_event` do stream-json, em degraus de 1%, por isso o arredondamento para baixo.
-LIMITE_DIA = 0.30
+LIMITE_DIA = 0.50  # 29/10: 30%; 24/11: 50% (3 rodadas por dia de vagas + GitHub)
 USO_BASE = "Diario/uso-base.json"
 
 

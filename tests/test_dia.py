@@ -347,13 +347,13 @@ def test_vagas_para_no_limite_do_dia_contando_a_rotina(tmp_path):
     vistos = []
 
     def executor(t, r, teto):
-        for s in (0.22, 0.23, 0.24, 0.30):
+        for s in (0.22, 0.25, 0.27, 0.30):
             vistos.append(s)
             yield _limite(s)
         yield {"type": "result", "subtype": "success", "result": "não devia chegar aqui"}
 
     saida = dia.rodar_vagas(raiz, executor, hoje=HOJE)
-    assert saida.startswith("Rodada encerrada no limite de 30%") and vistos == [0.22, 0.23, 0.24]
+    assert saida.startswith("Rodada encerrada no limite de 50%") and vistos == [0.22, 0.25, 0.27]
     assert dia.historico_vagas(raiz)[-1]["status"] == "limite"
 
 
