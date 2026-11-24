@@ -57,3 +57,37 @@ def gerar_mapas(raiz: str | Path, inicio: str = "Inicio") -> list[Path]:
     texto = INICIO_SECAO.sub("", texto).rstrip("\n") + "\n" + secao
     arq_inicio.write_text(texto, encoding="utf-8")
     return feitos
+
+
+RODAPE = "<!-- ligacoes: gerado por cerebro mapas -->"
+DATA = re.compile(r"(\d{4}-\d{2}-\d{2})")
+NAO_MEXER = {"CLAUDE", "MEMORY"}
+
+
+def ligar_soltas(raiz: str | Path, inicio: str = "Inicio") -> list[Path]:
+    """Nota sem nenhum [[link]] saindo ganha um rodapé: o mapa da pasta e, quando a nota tem data no nome,
+    o dia anterior/seguinte (Diario) ou o diário do mesmo dia. Idempotente: o rodapé tem marcador."""
+    raiz = Path(raiz)
+    diarios = sorted(p.stem for p in (raiz / "Diario").glob("*.md")) if (raiz / "Diario").exists() else []
+    ligadas = []
+    for nota in raiz.rglob("*.md"):
+        rel = nota.relative_to(raiz)
+        if rel.parts[0] in PULAR or rel.parts[0].startswith(".") or nota.stem in NAO_MEXER or nota.stem == inicio:
+            continue
+        texto = nota.read_text(encoding="utf-8", errors="ignore")
+        if "[[" in texto or RODAPE in texto:
+            continue
+        pasta = rel.parts[0] if len(rel.parts) > 1 else "Raiz"
+        links = [f"[[Mapa - {pasta}]]"]
+        m = DATA.search(nota.stem)
+        if m and pasta == "Diario" and nota.stem in diarios:
+            i = diarios.index(nota.stem)
+            if i > 0:
+                links.append(f"anterior: [[{diarios[i - 1]}]]")
+            if i + 1 < len(diarios):
+                links.append(f"seguinte: [[{diarios[i + 1]}]]")
+        elif m and m.group(1) in diarios:
+            links.append(f"dia: [[{m.group(1)}]]")
+        nota.write_text(texto.rstrip("\n") + f"\n\n{RODAPE}\nLigações: " + " · ".join(links) + "\n", encoding="utf-8")
+        ligadas.append(nota)
+    return ligadas

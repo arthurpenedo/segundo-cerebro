@@ -188,7 +188,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando == "mapas":
         from .mapas import gerar_mapas
-        print(f"{len(gerar_mapas(raiz))} mapas atualizados")
+        from .mapas import ligar_soltas
+        soltas = ligar_soltas(raiz)
+        print(f"{len(gerar_mapas(raiz))} mapas atualizados; {len(soltas)} notas sem link ganharam ligações")
         return 0
     if args.comando == "atividade":
         from .atividade import atividade
