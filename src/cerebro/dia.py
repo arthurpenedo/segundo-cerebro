@@ -515,7 +515,8 @@ def instrucao_vagas(hoje: date, levas: int = 10) -> str:
         f"5. Registre cada envio e cada pendência em `Vagas/Candidaturas.md` (seção do dia) e os aprendizados com "
         f"`cerebro aprendi`, LOGO depois de cada envio: a rodada pode ser cortada a qualquer momento pelo limite "
         f"de uso do dia. Não use git.\n"
-        f"6. Responda em até 5 linhas: quantas enviadas (empresa e vaga), quantas ficaram para o Arthur e por quê."
+        f"6. No fim, registre a rodada como um ponto no grafo: `cerebro atividade \"Leva de vagas: N candidaturas\" --links Candidaturas --texto \"sites e cidades\"`.\n"
+        f"7. Responda em até 5 linhas: quantas enviadas (empresa e vaga), quantas ficaram para o Arthur e por quê."
     )
 
 

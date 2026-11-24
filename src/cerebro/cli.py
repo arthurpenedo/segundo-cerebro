@@ -61,6 +61,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validar", help="checa o cofre (usado no CI)")
     sub.add_parser("caixa", help="junta os recados para o Arthur por pedido e atualiza a nota da caixa")
     sub.add_parser("hoje", help="gera a nota Hoje a partir das tarefas e da fila do Claude")
+    p = sub.add_parser("atividade", help="registra uma atividade feita como um ponto no grafo (nota curta ligada ao dia)")
+    p.add_argument("titulo")
+    p.add_argument("--texto", default="")
+    p.add_argument("--links", default="", help="notas-fonte separadas por virgula, ex.: Candidaturas,vagas-locais")
     p = sub.add_parser("aprendi", help="registra um aprendizado no cofre (diário + manual do tema)")
     p.add_argument("texto")
     p.add_argument("--tema")
@@ -181,6 +185,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Cofre criado em {destino}. Abra a pasta no Obsidian e rode `cerebro validar` dentro dela.")
         return 0
 
+    if args.comando == "atividade":
+        from .atividade import atividade
+        for p in atividade(raiz, args.titulo, args.texto, args.links.split(",")):
+            print(p.relative_to(raiz).as_posix())
+        return 0
     if args.comando == "aprendi":
         from .aprendizado import aprendi
 
